@@ -1,0 +1,56 @@
+{
+  "name": "verifireando",
+  "version": "1.0.0",
+  "description": "Plataforma de verificación vehicular - Sistema completo con backend y frontend",
+  "main": "backend/app.js",
+  "scripts": {
+    "install:backend": "cd backend && npm install",
+    "install:frontend": "cd frontend && npm install",
+    "install:all": "npm run install:backend && npm run install:frontend",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "build:frontend": "cd frontend && npm run build",
+    "build:production": "node build-production.js",
+    "start:backend": "cd backend && npm start",
+    "start:frontend": "cd frontend && npm run preview",
+    "start": "concurrently \"npm run start:backend\" \"npm run start:frontend\"",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "test": "npm run test:backend && npm run test:frontend",
+    "lint:backend": "cd backend && npm run lint",
+    "lint:frontend": "cd frontend && npm run lint",
+    "lint": "npm run lint:backend && npm run lint:frontend",
+    "seed": "cd backend && npm run seed",
+    "deploy:prepare": "npm run build:production",
+    "clean": "rimraf backend/node_modules frontend/node_modules frontend/dist backend/logs"
+  },
+  "keywords": [
+    "verificacion",
+    "vehicular",
+    "nodejs",
+    "react",
+    "express",
+    "mongodb",
+    "pwa",
+    "mobile-app"
+  ],
+  "author": "Verifireando Team",
+  "license": "MIT",
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "rimraf": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=16.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tu-usuario/verifireando.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tu-usuario/verifireando/issues"
+  },
+  "homepage": "https://verifireando.com"
+}
