@@ -3,9 +3,6 @@
   "version": "1.0.0",
   "description": "Vercel Functions for Verifireando API",
   "main": "index.js",
-  "engines": {
-    "node": "18.x"
-  },
   "packageManager": "npm@9.0.0",
   "dependencies": {
     "bcryptjs": "^2.4.3",
