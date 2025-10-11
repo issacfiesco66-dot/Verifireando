@@ -22,7 +22,16 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig)
 const messaging = getMessaging(app)
-const analytics = getAnalytics(app)
+
+// Initialize Analytics only if measurementId is provided
+let analytics = null
+if (firebaseConfig.measurementId) {
+  try {
+    analytics = getAnalytics(app)
+  } catch (error) {
+    console.warn('Firebase Analytics initialization failed:', error)
+  }
+}
 
 // Notification reducer
 const notificationReducer = (state, action) => {
