@@ -42,9 +42,10 @@
     "rimraf": "^5.0.5"
   },
   "engines": {
-    "node": ">=16.0.0",
+    "node": "18.x",
     "npm": ">=8.0.0"
   },
+  "packageManager": "npm@9.0.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/tu-usuario/verifireando.git"
