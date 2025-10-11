@@ -42,7 +42,7 @@
     "rimraf": "^5.0.5"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "18.x"
   },
   "packageManager": "npm@9.0.0",
   "repository": {
