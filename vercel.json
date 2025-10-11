@@ -6,7 +6,8 @@
   "framework": "vite",
   "functions": {
     "api/*.js": {
-      "runtime": "@vercel/node@3.0.7"
+      "runtime": "@vercel/node@3.0.7",
+      "installCommand": "cd api && npm install"
     }
   },
   "rewrites": [
