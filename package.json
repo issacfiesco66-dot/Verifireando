@@ -40,9 +40,9 @@
   "devDependencies": {
     "concurrently": "^8.2.2",
     "rimraf": "^5.0.5"
-  },
   "engines": {
-    "node": "22.x",
+    "node": "20.x"
+  },,
     "npm": ">=8.0.0"
   },
   "packageManager": "npm@9.0.0",
