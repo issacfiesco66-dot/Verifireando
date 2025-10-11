@@ -114,6 +114,75 @@ const mockNotifications = [
   }
 ];
 
+const mockAppointments = [
+  {
+    _id: '507f1f77bcf86cd799439030',
+    appointmentNumber: 'VER-2025-001',
+    client: '507f1f77bcf86cd799439011', // Cliente Test
+    driver: '507f1f77bcf86cd799439013', // Chofer Test
+    car: '507f1f77bcf86cd799439040',
+    status: 'assigned',
+    scheduledDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
+    scheduledTime: '10:00',
+    services: {
+      verification: true,
+      additionalServices: []
+    },
+    pickupAddress: {
+      street: 'Av. Reforma 123',
+      city: 'Ciudad de México',
+      state: 'CDMX',
+      zipCode: '06600',
+      coordinates: { lat: 19.4326, lng: -99.1332 }
+    },
+    deliveryAddress: {
+      street: 'Av. Insurgentes 456',
+      city: 'Ciudad de México',
+      state: 'CDMX',
+      zipCode: '06700',
+      coordinates: { lat: 19.4284, lng: -99.1276 }
+    },
+    totalAmount: 500.00,
+    notes: 'Cita de verificación vehicular',
+    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+    updatedAt: new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
+  },
+  {
+    _id: '507f1f77bcf86cd799439031',
+    appointmentNumber: 'VER-2025-002',
+    client: '507f1f77bcf86cd799439011', // Cliente Test
+    driver: null,
+    car: '507f1f77bcf86cd799439041',
+    status: 'pending',
+    scheduledDate: new Date(Date.now() + 48 * 60 * 60 * 1000), // Day after tomorrow
+    scheduledTime: '14:00',
+    services: {
+      verification: true,
+      additionalServices: [
+        { type: 'wash', price: 100.00 }
+      ]
+    },
+    pickupAddress: {
+      street: 'Calle Madero 789',
+      city: 'Ciudad de México',
+      state: 'CDMX',
+      zipCode: '06000',
+      coordinates: { lat: 19.4342, lng: -99.1386 }
+    },
+    deliveryAddress: {
+      street: 'Calle Madero 789',
+      city: 'Ciudad de México',
+      state: 'CDMX',
+      zipCode: '06000',
+      coordinates: { lat: 19.4342, lng: -99.1386 }
+    },
+    totalAmount: 600.00,
+    notes: 'Incluir lavado del vehículo',
+    createdAt: new Date(Date.now() - 1 * 60 * 60 * 1000), // 1 hour ago
+    updatedAt: new Date(Date.now() - 1 * 60 * 60 * 1000)
+  }
+];
+
 const logger = require('../utils/logger');
 
 const connectMockDB = () => {
@@ -173,6 +242,7 @@ module.exports = {
   mockUsers,
   mockDrivers,
   mockNotifications,
+  mockAppointments,
   mockMongoose,
   createMockModel
 };

@@ -4,7 +4,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Payment = require('../models/Payment');
 const Appointment = require('../models/Appointment');
 const Notification = require('../models/Notification');
-const { auth, authorize } = require('../middleware/auth-mock');
+const { auth, authorize } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();

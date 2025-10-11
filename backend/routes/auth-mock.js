@@ -18,7 +18,32 @@ const loginSchema = Joi.object({
   role: Joi.string().valid('client', 'driver', 'admin').default('client')
 });
 
-// Función para generar JWT
+const registerSchema = Joi.object({
+  name: Joi.string().min(2).max(100).required(),
+  email: Joi.string().email().required(),
+  phone: Joi.string().pattern(/^(\+52)?[0-9]{10}$/).required(),
+  password: Joi.string().min(6).required(),
+  role: Joi.string().valid('client', 'driver').default('client'),
+  // Campos adicionales para conductores
+  licenseNumber: Joi.when('role', {
+    is: 'driver',
+    then: Joi.string().required(),
+    otherwise: Joi.forbidden()
+  }),
+  vehicleInfo: Joi.when('role', {
+    is: 'driver',
+    then: Joi.object({
+      brand: Joi.string().required(),
+      model: Joi.string().required(),
+      year: Joi.number().min(1990).max(new Date().getFullYear() + 1).required(),
+      plates: Joi.string().required(),
+      color: Joi.string().required()
+    }).required(),
+    otherwise: Joi.forbidden()
+  })
+});
+
+// Función para generar token JWT
 const generateToken = (user, role) => {
   return jwt.sign(
     { 
@@ -30,6 +55,103 @@ const generateToken = (user, role) => {
     { expiresIn: '7d' }
   );
 };
+
+// Registro de usuarios
+router.post('/register', async (req, res) => {
+  try {
+    const { error, value } = registerSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ 
+        message: 'Datos inválidos', 
+        errors: error.details.map(d => d.message) 
+      });
+    }
+
+    const { name, email, phone, password, role, licenseNumber, vehicleInfo } = value;
+
+    // Verificar si el email ya existe
+    const existingUser = await MockUser.findOne({ email });
+    const existingDriver = await MockDriver.findOne({ email });
+    
+    if (existingUser || existingDriver) {
+      return res.status(409).json({ message: 'El email ya está registrado' });
+    }
+
+    // Crear nuevo usuario según el rol
+    let newUser;
+    let userRole = role;
+
+    if (role === 'driver') {
+      // Crear conductor
+      const driverData = {
+        _id: `driver_${Date.now()}`,
+        name,
+        email,
+        phone,
+        password, // En un sistema real, esto se hashearía
+        licenseNumber,
+        vehicleInfo,
+        isOnline: false,
+        isAvailable: false,
+        isVerified: false,
+        isActive: true,
+        rating: 0,
+        totalRides: 0,
+        verificationStatus: 'pending',
+        createdAt: new Date()
+      };
+
+      // Agregar a la base de datos mock
+      mockDrivers.push(driverData);
+      newUser = await MockDriver.findOne({ email });
+      userRole = 'driver';
+    } else {
+      // Crear cliente
+      const clientData = {
+        _id: `client_${Date.now()}`,
+        name,
+        email,
+        phone,
+        password, // En un sistema real, esto se hashearía
+        role: 'client',
+        isActive: true,
+        createdAt: new Date()
+      };
+
+      // Agregar a la base de datos mock
+      mockUsers.push(clientData);
+      newUser = await MockUser.findOne({ email });
+      userRole = 'client';
+    }
+
+    // Generar token
+    const token = generateToken(newUser, userRole);
+
+    logger.info(`Registro exitoso (MOCK): ${email} (${userRole})`);
+
+    res.status(201).json({
+      message: 'Registro exitoso',
+      token,
+      user: {
+        id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        phone: newUser.phone,
+        role: userRole,
+        ...(userRole === 'driver' && {
+          isOnline: newUser.isOnline,
+          isAvailable: newUser.isAvailable,
+          isVerified: newUser.isVerified,
+          verificationStatus: newUser.verificationStatus
+        })
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error en registro (MOCK):', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
 
 // Login con base de datos mock
 router.post('/login', async (req, res) => {

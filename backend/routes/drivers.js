@@ -2,7 +2,8 @@ const express = require('express');
 const Joi = require('joi');
 const Driver = require('../models/Driver');
 const Appointment = require('../models/Appointment');
-const { auth, authorize } = require('../middleware/auth-mock');
+const { auth, authorize } = require('../middleware/auth');
+const { mockDrivers } = require('../config/mockDatabase');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -39,73 +40,57 @@ const locationSchema = Joi.object({
   lng: Joi.number().min(-180).max(180).required()
 });
 
-// Obtener todos los choferes (admin) o choferes disponibles (público)
+// Obtener todos los choferes (admin) o choferes disponibles (público) - USANDO DATOS MOCK
 router.get('/', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     
-    let filter = {};
+    // Usar datos mock en lugar de MongoDB
+    let filteredDrivers = [...mockDrivers];
     
     // Si no es admin, solo mostrar choferes verificados y activos
     if (!req.user || req.userRole !== 'admin') {
-      filter = {
-        isVerified: true,
-        isActive: true,
-        verificationStatus: 'approved'
-      };
+      filteredDrivers = filteredDrivers.filter(driver => 
+        driver.isVerified === true && 
+        driver.isActive === true
+      );
     }
     
     // Filtros adicionales para admin
     if (req.user && req.userRole === 'admin') {
-      if (req.query.verificationStatus) {
-        filter.verificationStatus = req.query.verificationStatus;
-      }
-      
       if (req.query.isOnline !== undefined) {
-        filter.isOnline = req.query.isOnline === 'true';
+        const isOnline = req.query.isOnline === 'true';
+        filteredDrivers = filteredDrivers.filter(driver => driver.isOnline === isOnline);
       }
       
       if (req.query.isAvailable !== undefined) {
-        filter.isAvailable = req.query.isAvailable === 'true';
+        const isAvailable = req.query.isAvailable === 'true';
+        filteredDrivers = filteredDrivers.filter(driver => driver.isAvailable === isAvailable);
       }
     }
     
     // Filtro de búsqueda
     if (req.query.search) {
-      filter.$or = [
-        { name: { $regex: req.query.search, $options: 'i' } },
-        { email: { $regex: req.query.search, $options: 'i' } },
-        { licenseNumber: { $regex: req.query.search, $options: 'i' } },
-        { 'vehicleInfo.plates': { $regex: req.query.search, $options: 'i' } }
-      ];
+      const searchTerm = req.query.search.toLowerCase();
+      filteredDrivers = filteredDrivers.filter(driver => 
+        driver.name.toLowerCase().includes(searchTerm) ||
+        driver.email.toLowerCase().includes(searchTerm) ||
+        driver.licenseNumber.toLowerCase().includes(searchTerm) ||
+        (driver.vehicleInfo && driver.vehicleInfo.plates && driver.vehicleInfo.plates.toLowerCase().includes(searchTerm))
+      );
     }
 
-    // Filtro por ubicación (choferes cercanos)
-    if (req.query.lat && req.query.lng && req.query.radius) {
-      const lat = parseFloat(req.query.lat);
-      const lng = parseFloat(req.query.lng);
-      const radius = parseFloat(req.query.radius) * 1000; // convertir km a metros
-      
-      filter.location = {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [lng, lat]
-          },
-          $maxDistance: radius
-        }
-      };
-    }
-
-    const drivers = await Driver.find(filter)
-      .select('-password -bankInfo')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Driver.countDocuments(filter);
+    // Aplicar paginación
+    const total = filteredDrivers.length;
+    const drivers = filteredDrivers
+      .slice(skip, skip + limit)
+      .map(driver => {
+        // Remover información sensible
+        const { password, bankInfo, ...safeDriver } = driver;
+        return safeDriver;
+      });
 
     res.json({
       drivers,

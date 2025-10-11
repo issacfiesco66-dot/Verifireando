@@ -5,15 +5,23 @@ const Driver = require('../models/Driver');
 const Car = require('../models/Car');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
-const { auth, authorize } = require('../middleware/auth-mock');
+const { auth, authorize } = require('../middleware/auth');
+const { mockAppointments } = require('../config/mockDatabase');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// Función auxiliar para calcular hora de fin
+function calculateEndTime(startTime) {
+  const [hours, minutes] = startTime.split(':').map(Number);
+  const endHours = hours + 1; // Duración de 1 hora por defecto
+  return `${endHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
 // Esquemas de validación
 const createAppointmentSchema = Joi.object({
   car: Joi.string().required(),
-  scheduledDate: Joi.date().required().min('now'),
+  scheduledDate: Joi.date().required(),
   scheduledTime: Joi.string().required().pattern(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/),
   services: Joi.object({
     verification: Joi.boolean().default(true),
@@ -132,19 +140,26 @@ router.get('/', auth, async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     
-    let filter = {};
+    // Usar datos mock en lugar de MongoDB
+    let filteredAppointments = [...mockAppointments];
     
     // Filtrar por rol
     if (req.userRole === 'client') {
-      filter.client = req.userId;
+      filteredAppointments = filteredAppointments.filter(appointment => 
+        appointment.client === req.userId
+      );
     } else if (req.userRole === 'driver') {
-      filter.driver = req.userId;
+      filteredAppointments = filteredAppointments.filter(appointment => 
+        appointment.driver === req.userId
+      );
     }
     // Admin ve todas las citas
     
     // Filtros adicionales
     if (req.query.status) {
-      filter.status = req.query.status;
+      filteredAppointments = filteredAppointments.filter(appointment => 
+        appointment.status === req.query.status
+      );
     }
     
     if (req.query.date) {
@@ -152,30 +167,30 @@ router.get('/', auth, async (req, res) => {
       const nextDay = new Date(date);
       nextDay.setDate(date.getDate() + 1);
       
-      filter.scheduledDate = {
-        $gte: date,
-        $lt: nextDay
-      };
+      filteredAppointments = filteredAppointments.filter(appointment => {
+        const appointmentDate = new Date(appointment.scheduledDate);
+        return appointmentDate >= date && appointmentDate < nextDay;
+      });
     }
     
     if (req.query.driver && req.userRole === 'admin') {
-      filter.driver = req.query.driver;
+      filteredAppointments = filteredAppointments.filter(appointment => 
+        appointment.driver === req.query.driver
+      );
     }
     
     if (req.query.client && req.userRole === 'admin') {
-      filter.client = req.query.client;
+      filteredAppointments = filteredAppointments.filter(appointment => 
+        appointment.client === req.query.client
+      );
     }
 
-    const appointments = await Appointment.find(filter)
-      .populate('client', 'name email phone')
-      .populate('driver', 'name phone vehicleInfo rating')
-      .populate('car', 'plates brand model color')
-      .populate('payment')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
-
-    const total = await Appointment.countDocuments(filter);
+    // Ordenar por fecha de creación (más recientes primero)
+    filteredAppointments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    // Aplicar paginación
+    const total = filteredAppointments.length;
+    const appointments = filteredAppointments.slice(skip, skip + limit);
 
     res.json({
       appointments,
@@ -263,14 +278,45 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    // Crear la cita
-    const appointment = new Appointment({
+    // Mapear scheduledTime a timeSlot y agregar pricing base
+    const appointmentData = {
       ...value,
-      client: req.userId
-    });
+      client: req.userId,
+      timeSlot: {
+        start: value.scheduledTime,
+        end: calculateEndTime(value.scheduledTime) // Función para calcular hora de fin
+      },
+      pricing: {
+        basePrice: 500, // Precio base para verificación
+        additionalServicesPrice: 0,
+        taxes: 80,
+        total: 580
+      },
+      // Convertir coordenadas al formato GeoJSON
+      pickupAddress: {
+        ...value.pickupAddress,
+        coordinates: {
+          type: 'Point',
+          coordinates: [value.pickupAddress.coordinates.lng, value.pickupAddress.coordinates.lat] // [longitude, latitude]
+        }
+      },
+      deliveryAddress: {
+        ...value.deliveryAddress,
+        coordinates: {
+          type: 'Point',
+          coordinates: [value.deliveryAddress.coordinates.lng, value.deliveryAddress.coordinates.lat] // [longitude, latitude]
+        }
+      }
+    };
+
+    // Remover scheduledTime ya que no existe en el modelo
+    delete appointmentData.scheduledTime;
+
+    // Crear la cita
+    const appointment = new Appointment(appointmentData);
 
     // Calcular precio total
-    appointment.calculateTotalPrice();
+    appointment.calculateTotal();
     
     await appointment.save();
 

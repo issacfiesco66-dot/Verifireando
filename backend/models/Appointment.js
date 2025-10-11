@@ -18,7 +18,7 @@ const appointmentSchema = new mongoose.Schema({
   appointmentNumber: {
     type: String,
     unique: true,
-    required: true
+    required: false // Se genera automáticamente en pre-save
   },
   scheduledDate: {
     type: Date,
@@ -50,8 +50,15 @@ const appointmentSchema = new mongoose.Schema({
     state: { type: String, required: true },
     zipCode: String,
     coordinates: {
-      lat: { type: Number, required: true },
-      lng: { type: Number, required: true }
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point'
+      },
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        required: true
+      }
     },
     instructions: String
   },
@@ -153,7 +160,7 @@ appointmentSchema.index({ car: 1 });
 appointmentSchema.index({ appointmentNumber: 1 });
 appointmentSchema.index({ scheduledDate: 1 });
 appointmentSchema.index({ status: 1 });
-appointmentSchema.index({ 'pickupAddress.coordinates': '2dsphere' });
+appointmentSchema.index({ 'pickupAddress.coordinates.coordinates': '2dsphere' });
 
 // Índices compuestos
 appointmentSchema.index({ status: 1, scheduledDate: 1 });

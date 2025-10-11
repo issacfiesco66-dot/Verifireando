@@ -1,7 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
 const Car = require('../models/Car');
-const { auth, authorize } = require('../middleware/auth-mock');
+const { auth, authorize } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
 const router = express.Router();

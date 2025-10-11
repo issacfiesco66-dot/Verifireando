@@ -14,7 +14,30 @@ const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   phone: Joi.string().pattern(/^(\+52)?[0-9]{10}$/).required(),
   password: Joi.string().min(6).required(),
-  role: Joi.string().valid('client', 'driver').default('client')
+  role: Joi.string().valid('client', 'driver').default('client'),
+  // Campos adicionales para choferes
+  licenseNumber: Joi.when('role', {
+    is: 'driver',
+    then: Joi.string().required(),
+    otherwise: Joi.forbidden()
+  }),
+  licenseExpiry: Joi.when('role', {
+    is: 'driver',
+    then: Joi.date().required(),
+    otherwise: Joi.forbidden()
+  }),
+  vehicleInfo: Joi.when('role', {
+    is: 'driver',
+    then: Joi.object({
+      brand: Joi.string().required(),
+      model: Joi.string().required(),
+      year: Joi.number().integer().min(1990).max(new Date().getFullYear() + 1).required(),
+      plates: Joi.string().required(),
+      color: Joi.string().required(),
+      photos: Joi.array().items(Joi.string()).optional()
+    }).required(),
+    otherwise: Joi.forbidden()
+  })
 });
 
 const loginSchema = Joi.object({
@@ -60,7 +83,7 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    const { name, email, phone, password, role } = value;
+    const { name, email, phone, password, role, licenseNumber, licenseExpiry, vehicleInfo } = value;
 
     // Verificar si el usuario ya existe
     const Model = role === 'driver' ? Driver : User;
@@ -78,6 +101,11 @@ router.post('/register', async (req, res) => {
     const userData = { name, email, phone, password };
     if (role === 'client') {
       userData.role = 'client';
+    } else if (role === 'driver') {
+      userData.role = 'driver';
+      userData.licenseNumber = licenseNumber;
+      userData.licenseExpiry = licenseExpiry;
+      userData.vehicleInfo = vehicleInfo;
     }
 
     const user = new Model(userData);

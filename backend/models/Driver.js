@@ -122,6 +122,12 @@ const driverSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  verificationCode: {
+    type: String
+  },
+  verificationCodeExpires: {
+    type: Date
   }
 }, {
   timestamps: true
@@ -151,6 +157,20 @@ driverSchema.pre('save', async function(next) {
 // Método para comparar contraseñas
 driverSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.password);
+};
+
+// Método para generar código de verificación
+driverSchema.methods.generateVerificationCode = function() {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  this.verificationCode = code;
+  this.verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
+  return code;
+};
+
+// Método para verificar código
+driverSchema.methods.verifyCode = function(code) {
+  return this.verificationCode === code && 
+         this.verificationCodeExpires > new Date();
 };
 
 // Método para actualizar ubicación
@@ -185,7 +205,8 @@ driverSchema.methods.updateRating = function(newRating) {
 driverSchema.methods.toJSON = function() {
   const driver = this.toObject();
   delete driver.password;
-  delete driver.bankInfo;
+  delete driver.verificationCode;
+  delete driver.verificationCodeExpires;
   return driver;
 };
 

@@ -47,7 +47,6 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           router: ['react-router-dom'],
           ui: ['lucide-react'],
-          maps: ['leaflet', 'react-leaflet'],
           forms: ['react-hook-form'],
           utils: ['axios', 'date-fns', 'clsx'],
           firebase: ['firebase/app', 'firebase/messaging', 'firebase/storage'],

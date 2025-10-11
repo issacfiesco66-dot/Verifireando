@@ -16,7 +16,7 @@ const { connectDB } = require('./config/database');
 const { mockMongoose } = require('./config/mockDatabase');
 
 // Importar rutas
-const authRoutes = require('./routes/auth-mock'); // Usando mock temporalmente
+const authRoutes = require('./routes/auth'); // Usando MongoDB Atlas
 const userRoutes = require('./routes/users');
 const driverRoutes = require('./routes/drivers');
 const carRoutes = require('./routes/cars');
@@ -357,8 +357,14 @@ io.on('connection', (socket) => {
 // Función para iniciar el servidor
 async function startServer() {
   try {
-    // Conectar a la base de datos (usando mock temporalmente)
-    await mockMongoose.connect();
+    // Conectar a MongoDB Atlas
+    const dbConnection = await connectDB();
+    
+    if (dbConnection) {
+      logger.info('✅ Conectado a MongoDB Atlas - Base de datos: verifireando');
+    } else {
+      logger.warn('⚠️  Iniciando sin conexión a base de datos');
+    }
     
     // Iniciar servidor
     const PORT = process.env.PORT || 5000;
