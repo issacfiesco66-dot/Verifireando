@@ -446,12 +446,20 @@ process.on('SIGINT', () => {
 // Manejo de errores no capturados
 process.on('uncaughtException', (error) => {
   logger.error('Excepción no capturada:', error);
-  process.exit(1);
+  if ((process.env.NODE_ENV || 'development') !== 'production') {
+    process.exit(1);
+  } else {
+    logger.warn('Continuando ejecución en producción tras excepción no capturada');
+  }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Promesa rechazada no manejada:', { reason, promise });
-  process.exit(1);
+  if ((process.env.NODE_ENV || 'development') !== 'production') {
+    process.exit(1);
+  } else {
+    logger.warn('Continuando ejecución en producción tras promesa rechazada no manejada');
+  }
 });
 
 // Iniciar servidor si este archivo es ejecutado directamente
