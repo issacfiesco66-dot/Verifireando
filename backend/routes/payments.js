@@ -1,11 +1,26 @@
 const express = require('express');
 const Joi = require('joi');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+let stripe = null;
+const logger = require('../utils/logger');
+const stripeKey = process.env.STRIPE_SECRET_KEY;
+try {
+  if (stripeKey) {
+    // Inicialización perezosa y segura de Stripe
+    // Evita que la app caiga si la clave no está configurada
+    // o si require('stripe') falla en arranque
+    stripe = require('stripe')(stripeKey);
+    logger.info('Stripe inicializado correctamente');
+  } else {
+    logger.warn('Stripe no configurado (STRIPE_SECRET_KEY ausente); endpoints de tarjeta limitados');
+  }
+} catch (e) {
+  logger.error('Error inicializando Stripe:', e);
+  stripe = null;
+}
 const Payment = require('../models/Payment');
 const Appointment = require('../models/Appointment');
 const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
-const logger = require('../utils/logger');
 
 const router = express.Router();
 
@@ -76,6 +91,11 @@ router.post('/create-intent', auth, async (req, res) => {
 
     // Solo crear Payment Intent en Stripe si es pago con tarjeta
     if (value.paymentMethod === 'card') {
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Pago con tarjeta no disponible: Stripe no está configurado' 
+        });
+      }
       try {
         paymentIntent = await stripe.paymentIntents.create({
           amount: total * 100, // Stripe usa centavos
@@ -203,6 +223,11 @@ router.post('/confirm', auth, async (req, res) => {
     }
 
     if (value.paymentMethod === 'card') {
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Pago con tarjeta no disponible: Stripe no está configurado' 
+        });
+      }
       try {
         // Confirmar pago en Stripe
         const paymentIntent = await stripe.paymentIntents.retrieve(payment.stripePaymentIntentId);
@@ -283,6 +308,9 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
   let event;
 
   try {
+    if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+      return res.status(400).send('Stripe no configurado para webhooks');
+    }
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     logger.error('Error verificando webhook de Stripe:', err);
@@ -496,6 +524,9 @@ router.post('/:id/refund', auth, authorize('admin'), async (req, res) => {
 
     // Procesar reembolso en Stripe si es pago con tarjeta
     if (payment.provider === 'stripe' && payment.stripeChargeId) {
+      if (!stripe) {
+        return res.status(503).json({ message: 'Stripe no está configurado' });
+      }
       try {
         stripeRefund = await stripe.refunds.create({
           charge: payment.stripeChargeId,
