@@ -8,6 +8,7 @@ const morgan = require('morgan');
 const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
+const fs = require('fs');
 require('dotenv').config();
 
 // Importar utilidades
@@ -23,6 +24,8 @@ const carRoutes = require('./routes/cars');
 const appointmentRoutes = require('./routes/appointments');
 const paymentRoutes = require('./routes/payments');
 const notificationRoutes = require('./routes/notifications');
+const serviceRoutes = require('./routes/services');
+const diagnosticsRoutes = require('./routes/diagnostics');
 
 // Crear aplicación Express
 const app = express();
@@ -187,6 +190,17 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Alias de health para clientes que esperan /api/health
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: process.env.npm_package_version || '1.0.0'
+  });
+});
+
 // Rutas de la API
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
@@ -195,14 +209,23 @@ app.use('/api/cars', carRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/services', serviceRoutes);
+app.use('/api/diagnostics', diagnosticsRoutes);
 
 // Ruta para servir el frontend en producción
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../frontend/dist')));
-  
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-  });
+  const distPath = path.join(__dirname, '../frontend/dist');
+  const indexPath = path.join(distPath, 'index.html');
+  const serveFrontend = process.env.SERVE_FRONTEND !== 'false';
+
+  if (serveFrontend && fs.existsSync(indexPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(indexPath);
+    });
+  } else {
+    logger.info('Frontend dist no encontrado o deshabilitado; sirviendo solo API.');
+  }
 }
 
 // Middleware de manejo de errores 404
@@ -302,34 +325,47 @@ io.on('connection', (socket) => {
     logger.info(`Cliente se unió a sala de cita ${appointmentId}`);
   });
 
-  // Actualización de ubicación del chofer
-  socket.on('driver-location-update', (data) => {
+  // Unirse a sala genérica (compatibilidad con frontend)
+  socket.on('join-room', (room) => {
+    socket.join(room);
+    logger.info(`Cliente ${socket.id} se unió a sala ${room}`);
+  });
+
+  // Actualización de ubicación del chofer (nombre estándar)
+  socket.on('update-location', (data) => {
     const { driverId, appointmentId, location } = data;
-    
-    // Emitir a la sala de la cita
     if (appointmentId) {
-      socket.to(`appointment-${appointmentId}`).emit('driver-location-updated', {
+      io.to(`appointment-${appointmentId}`).emit('driver-location-updated', {
         driverId,
         location,
         timestamp: new Date()
       });
     }
-    
-    logger.info(`Ubicación actualizada para chofer ${driverId}`);
+    logger.info(`Ubicación actualizada (update-location) para chofer ${driverId}`);
+  });
+
+  // Actualización de ubicación del chofer (alias soportado)
+  socket.on('driver-location-update', (data) => {
+    const { driverId, appointmentId, location } = data;
+    if (appointmentId) {
+      io.to(`appointment-${appointmentId}`).emit('driver-location-updated', {
+        driverId,
+        location,
+        timestamp: new Date()
+      });
+    }
+    logger.info(`Ubicación actualizada (driver-location-update) para chofer ${driverId}`);
   });
 
   // Actualización de estado de cita
   socket.on('appointment-status-update', (data) => {
     const { appointmentId, status, location } = data;
-    
-    // Emitir a todos en la sala de la cita
-    io.to(`appointment-${appointmentId}`).emit('appointment-status-updated', {
+    io.to(`appointment-${appointmentId}`).emit('appointment-updated', {
       appointmentId,
       status,
       location,
       timestamp: new Date()
     });
-    
     logger.info(`Estado de cita ${appointmentId} actualizado a ${status}`);
   });
 
