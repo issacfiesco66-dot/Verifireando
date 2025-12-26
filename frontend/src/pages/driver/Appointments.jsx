@@ -41,14 +41,14 @@ const Appointments = () => {
 
   useEffect(() => {
     if (socket) {
-      socket.on('appointmentAssigned', handleAppointmentAssigned)
-      socket.on('appointmentUpdated', handleAppointmentUpdated)
-      socket.on('appointmentCancelled', handleAppointmentCancelled)
+      socket.on('appointment-assigned', handleAppointmentAssigned)
+      socket.on('appointment-updated', handleAppointmentUpdated)
+      socket.on('appointment-cancelled', handleAppointmentCancelled)
 
       return () => {
-        socket.off('appointmentAssigned')
-        socket.off('appointmentUpdated')
-        socket.off('appointmentCancelled')
+        socket.off('appointment-assigned')
+        socket.off('appointment-updated')
+        socket.off('appointment-cancelled')
       }
     }
   }, [socket])
@@ -57,8 +57,10 @@ const Appointments = () => {
     try {
       setLoading(true)
       const response = await appointmentService.getDriverAppointments()
-      setAppointments(response.data)
+      const appointmentsData = response.data.appointments || []
+      setAppointments(appointmentsData)
     } catch (error) {
+      console.error('❌ Error fetching appointments:', error)
       toast.error('Error al cargar las citas')
     } finally {
       setLoading(false)
@@ -66,6 +68,7 @@ const Appointments = () => {
   }
 
   const handleAppointmentAssigned = (appointment) => {
+    console.log('📅 New appointment assigned:', appointment)
     setAppointments(prev => [appointment, ...prev])
     toast.success('Nueva cita asignada')
   }
@@ -82,6 +85,13 @@ const Appointments = () => {
   }
 
   const filterAppointments = () => {
+    // Validar que appointments sea un array antes de iterar
+    if (!Array.isArray(appointments)) {
+      console.warn('⚠️ Appointments is not an array:', appointments)
+      setFilteredAppointments([])
+      return
+    }
+    
     let filtered = [...appointments]
 
     // Filter by search term
@@ -204,8 +214,14 @@ const Appointments = () => {
   }
 
   const openNavigation = (appointment) => {
-    const { latitude, longitude } = appointment.location
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+    // Verificar que pickupAddress exista y tenga coordenadas
+    if (!appointment.pickupAddress || !appointment.pickupAddress.coordinates) {
+      toast.error('No hay coordenadas disponibles para esta cita')
+      return
+    }
+    
+    const { coordinates } = appointment.pickupAddress
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.lat},${coordinates.lng}`
     window.open(url, '_blank')
   }
 
@@ -213,6 +229,22 @@ const Appointments = () => {
     setSearchTerm('')
     setStatusFilter('all')
     setDateFilter('all')
+  }
+
+  const showAppointmentDetails = (appointment) => {
+    const details = `
+      📋 Número: ${appointment.appointmentNumber || 'N/A'}
+      👤 Cliente: ${appointment.client?.name || 'N/A'}
+      📞 Teléfono: ${appointment.client?.phone || 'N/A'}
+      📍 Dirección: ${appointment.pickupAddress?.street || 'N/A'}
+      📅 Fecha: ${new Date(appointment.scheduledDate).toLocaleDateString('es-MX')}
+      🕐 Hora: ${appointment.timeSlot?.start || 'N/A'}
+      🚗 Vehículo: ${appointment.car?.brand} ${appointment.car?.model} (${appointment.car?.plates})
+      💰 Precio: $${appointment.totalPrice || 'N/A'}
+      📝 Notas: ${appointment.notes || 'Sin notas'}
+    `
+    
+    alert(details.trim())
   }
 
   return (
@@ -427,7 +459,10 @@ const Appointments = () => {
                         <Navigation className="w-4 h-4" />
                         <span>Navegar</span>
                       </button>
-                      <button className="btn btn-primary btn-sm flex items-center space-x-2">
+                      <button 
+                        onClick={() => showAppointmentDetails(appointment)}
+                        className="btn btn-primary btn-sm flex items-center space-x-2"
+                      >
                         <Eye className="w-4 h-4" />
                         <span>Ver detalles</span>
                       </button>

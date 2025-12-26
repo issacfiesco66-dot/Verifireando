@@ -1,13 +1,16 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useContext } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSocket } from '../../contexts/SocketContext'
-import { useNotification } from '../../contexts/NotificationContext'
+import { NotificationContext } from '../../contexts/NotificationContext'
 import toast from 'react-hot-toast'
 
 const NotificationHandler = () => {
   const { user } = useAuth()
   const { socket, subscribe } = useSocket()
-  const { showBrowserNotification } = useNotification()
+  const notificationContext = useContext(NotificationContext)
+  
+  // Safely get showBrowserNotification function
+  const showBrowserNotification = notificationContext?.showBrowserNotification || (() => {})
 
   useEffect(() => {
     if (!socket || !user) return

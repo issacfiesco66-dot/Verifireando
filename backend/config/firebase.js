@@ -6,16 +6,43 @@ let firebaseApp = null;
 const initializeFirebase = () => {
   try {
     if (!firebaseApp) {
-      // En producción, usar las credenciales del service account
+      // Modo 1: variable FIREBASE_SERVICE_ACCOUNT con JSON completo
       if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        firebaseApp = admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-          storageBucket: process.env.FIREBASE_STORAGE_BUCKET
-        });
-        logger.info('Firebase inicializado en modo producción');
-      } else {
-        // Para desarrollo, usar credenciales por defecto o mock
+        try {
+          const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+          const bucket = process.env.FIREBASE_STORAGE_BUCKET || `${serviceAccount.project_id}.appspot.com`;
+          firebaseApp = admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            storageBucket: bucket
+          });
+          logger.info('Firebase inicializado en modo producción (JSON Service Account)');
+        } catch (jsonErr) {
+          logger.error('FIREBASE_SERVICE_ACCOUNT no es un JSON válido:', jsonErr);
+        }
+      }
+      
+      // Modo 2: variables separadas (PROJECT_ID, CLIENT_EMAIL, PRIVATE_KEY)
+      if (!firebaseApp && process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+        try {
+          const privateKey = process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n');
+          const credential = admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey
+          });
+          const bucket = process.env.FIREBASE_STORAGE_BUCKET || `${process.env.FIREBASE_PROJECT_ID}.appspot.com`;
+          firebaseApp = admin.initializeApp({
+            credential,
+            storageBucket: bucket
+          });
+          logger.info('Firebase inicializado en modo producción (vars individuales)');
+        } catch (certErr) {
+          logger.error('Error al inicializar Firebase con certificado:', certErr);
+        }
+      }
+
+      // Modo desarrollo/mocking si no hay credenciales reales
+      if (!firebaseApp) {
         logger.info('Firebase configurado en modo desarrollo (mock)');
         firebaseApp = {
           messaging: () => ({
@@ -47,6 +74,22 @@ const getFirebaseApp = () => {
     return initializeFirebase();
   }
   return firebaseApp;
+};
+
+// Nuevo: verificación de ID Tokens de Firebase
+const verifyFirebaseIdToken = async (idToken) => {
+  try {
+    // Verificar que admin esté inicializado con credenciales reales
+    if (!admin.apps || admin.apps.length === 0) {
+      logger.warn('Firebase Admin no inicializado; no se puede verificar ID Token');
+      return null;
+    }
+    const decoded = await admin.auth().verifyIdToken(idToken);
+    return decoded;
+  } catch (error) {
+    logger.error('Error verificando Firebase ID Token:', error);
+    return null;
+  }
 };
 
 const sendPushNotification = async (token, title, body, data = {}) => {
@@ -106,6 +149,7 @@ const sendMulticastNotification = async (tokens, title, body, data = {}) => {
 module.exports = {
   initializeFirebase,
   getFirebaseApp,
+  verifyFirebaseIdToken,
   sendPushNotification,
   sendMulticastNotification
 };

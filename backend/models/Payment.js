@@ -18,8 +18,13 @@ const paymentSchema = new mongoose.Schema({
   },
   amount: {
     subtotal: { type: Number, required: true },
+    discount: { type: Number, default: 0 },
     taxes: { type: Number, required: true },
     total: { type: Number, required: true }
+  },
+  coupon: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Coupon'
   },
   currency: {
     type: String,
@@ -61,6 +66,9 @@ const paymentSchema = new mongoose.Schema({
     // Metadatos del proveedor
     providerResponse: mongoose.Schema.Types.Mixed
   },
+  // Campos directos para compatibilidad
+  stripePaymentIntentId: String,
+  stripeChargeId: String,
   paymentDetails: {
     cardLast4: String,
     cardBrand: String,
@@ -79,8 +87,10 @@ const paymentSchema = new mongoose.Schema({
   refunds: [{
     amount: { type: Number, required: true },
     reason: String,
+    notes: String,
     refundId: String,
     processedAt: { type: Date, default: Date.now },
+    processedBy: mongoose.Schema.Types.ObjectId,
     status: {
       type: String,
       enum: ['pending', 'completed', 'failed'],
@@ -118,9 +128,10 @@ const paymentSchema = new mongoose.Schema({
 // Índices
 paymentSchema.index({ appointment: 1 });
 paymentSchema.index({ client: 1 });
-paymentSchema.index({ paymentNumber: 1 });
 paymentSchema.index({ status: 1 });
 paymentSchema.index({ 'paymentIntent.stripePaymentIntentId': 1 });
+paymentSchema.index({ stripePaymentIntentId: 1 });
+paymentSchema.index({ stripeChargeId: 1 });
 paymentSchema.index({ 'paymentIntent.mercadopagoId': 1 });
 paymentSchema.index({ createdAt: -1 });
 
@@ -172,12 +183,15 @@ paymentSchema.methods.updateStatus = function(newStatus, metadata = {}) {
 };
 
 // Método para procesar reembolso
-paymentSchema.methods.processRefund = function(amount, reason = '') {
+paymentSchema.methods.processRefund = function(amount, reason = '', notes = '', processedBy = null, stripeRefundId = null) {
   const refund = {
     amount,
     reason,
-    refundId: `ref_${Date.now()}`,
-    processedAt: new Date()
+    notes,
+    refundId: stripeRefundId || `ref_${Date.now()}`,
+    processedAt: new Date(),
+    processedBy: processedBy,
+    status: 'completed'
   };
   
   this.refunds.push(refund);
@@ -186,6 +200,7 @@ paymentSchema.methods.processRefund = function(amount, reason = '') {
   const totalRefunded = this.refunds.reduce((sum, r) => sum + r.amount, 0);
   if (totalRefunded >= this.amount.total) {
     this.status = 'refunded';
+    this.timeline.refunded = new Date();
   } else {
     this.status = 'partial_refund';
   }

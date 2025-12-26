@@ -54,13 +54,17 @@ const verifyOTPSchema = Joi.object({
 
 // Función para generar JWT
 const generateToken = (user, role) => {
+  const secret = process.env.JWT_SECRET || 'fallback-secret-key';
+  logger.info(`JWT: Using secret: ${secret}`);
+  logger.info(`JWT: Secret length: ${secret.length}`);
+  
   return jwt.sign(
     { 
       id: user._id, 
       email: user.email, 
       role: role || user.role 
     },
-    process.env.JWT_SECRET,
+    secret,
     { expiresIn: '7d' }
   );
 };
@@ -119,6 +123,16 @@ router.post('/register', async (req, res) => {
 
     logger.info(`Usuario registrado: ${email} (${role})`);
 
+    // En entorno de desarrollo, devolver el código en la respuesta para facilitar pruebas
+    if (process.env.NODE_ENV === 'development') {
+      return res.status(201).json({
+        message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp.',
+        userId: user._id,
+        needsVerification: true,
+        devCode: verificationCode // SOLO EN DESARROLLO
+      });
+    }
+
     res.status(201).json({
       message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp.',
       userId: user._id,
@@ -136,6 +150,7 @@ router.post('/login', async (req, res) => {
   try {
     const { error, value } = loginSchema.validate(req.body);
     if (error) {
+      logger.error('Login - Validación fallida:', error.details);
       return res.status(400).json({ 
         message: 'Datos inválidos', 
         errors: error.details.map(d => d.message) 
@@ -143,6 +158,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { email, password, role } = value;
+    logger.info(`Login intento - Email: ${email}, Role: ${role}`);
 
     // Buscar usuario según el rol
     let user;
@@ -159,13 +175,19 @@ router.post('/login', async (req, res) => {
       userRole = 'client';
     }
 
+    logger.info(`Usuario encontrado: ${user ? 'Sí' : 'No'}`);
+
     if (!user) {
+      logger.error('Login - Usuario no encontrado');
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
     // Verificar contraseña
+    logger.info('Verificando contraseña...');
     const isValidPassword = await user.comparePassword(password);
+    logger.info(`Contraseña válida: ${isValidPassword}`);
     if (!isValidPassword) {
+      logger.error('Login - Contraseña inválida');
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
@@ -190,6 +212,16 @@ router.post('/login', async (req, res) => {
       // Enviar OTP
       await sendWhatsAppOTP(user.phone, verificationCode);
       
+      // En entorno de desarrollo, devolver el código en la respuesta para facilitar pruebas
+      if (process.env.NODE_ENV === 'development') {
+        return res.status(403).json({ 
+          message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
+          needsVerification: true,
+          userId: user._id,
+          devCode: verificationCode // SOLO EN DESARROLLO
+        });
+      }
+
       return res.status(403).json({ 
         message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
         needsVerification: true,
@@ -214,7 +246,7 @@ router.post('/login', async (req, res) => {
         ...(userRole === 'driver' && {
           isOnline: user.isOnline,
           isAvailable: user.isAvailable,
-          rating: user.rating
+          rating: user.rating?.average || 0
         })
       }
     });
@@ -247,7 +279,11 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     // Verificar código
-    if (!user.verifyCode(code)) {
+    const isCodeValid = user.verifyCode(code);
+    if (!isCodeValid) {
+      if (process.env.NODE_ENV === 'development') {
+        logger.warn(`OTP inválido para ${email}. Recibido: ${code}, Esperado: ${user.verificationCode}`);
+      }
       return res.status(400).json({ message: 'Código inválido o expirado' });
     }
 
@@ -316,8 +352,8 @@ router.post('/resend-otp', async (req, res) => {
   }
 });
 
-// Obtener perfil del usuario autenticado
-router.get('/profile', auth, async (req, res) => {
+// Obtener perfil del usuario autenticado (Alias para compatibilidad frontend)
+router.get(['/profile', '/me'], auth, async (req, res) => {
   try {
     res.json({
       user: req.user,
@@ -401,6 +437,112 @@ router.put('/change-password', auth, async (req, res) => {
   } catch (error) {
     logger.error('Error cambiando contraseña:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Google Sign-In
+router.post('/google', async (req, res) => {
+  try {
+    const { idToken, email, name, photoURL } = req.body;
+
+    if (!idToken || !email) {
+      return res.status(400).json({ 
+        message: 'Token de Google y email son requeridos' 
+      });
+    }
+
+    logger.info(`Google sign-in attempt: ${email}`);
+
+    // Verificar el token de Firebase - en desarrollo permitir sin verificación
+    const { verifyFirebaseIdToken } = require('../config/firebase');
+    
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const decodedToken = await verifyFirebaseIdToken(idToken);
+        if (!decodedToken) {
+          return res.status(401).json({ 
+            message: 'Token de Google inválido' 
+          });
+        }
+        logger.info(`Firebase token verified for: ${decodedToken.email}`);
+      } catch (firebaseError) {
+        logger.error('Firebase token verification failed:', firebaseError);
+        return res.status(401).json({ 
+          message: 'Token de Google inválido' 
+        });
+      }
+    } else {
+      // En desarrollo, intentar verificar pero permitir si falla
+      try {
+        const decodedToken = await verifyFirebaseIdToken(idToken);
+        if (decodedToken) {
+          logger.info(`Firebase token verified for: ${decodedToken.email}`);
+        } else {
+          logger.info('Development mode: Firebase not available, proceeding without verification');
+        }
+      } catch (firebaseError) {
+        logger.info('Development mode: Firebase verification failed, proceeding without verification');
+      }
+    }
+
+    // Buscar usuario existente
+    let user = await User.findOne({ email });
+    
+    if (!user) {
+      // Crear nuevo usuario si no existe
+      user = new User({
+        name: name || email.split('@')[0],
+        email,
+        phone: '+520000000000', // Teléfono por defecto, debe ser actualizado
+        password: 'google_oauth_user', // Contraseña placeholder
+        role: 'client',
+        isActive: true,
+        isVerified: true, // Los usuarios de Google se consideran verificados
+        authProvider: 'google',
+        photoURL: photoURL || null
+      });
+      
+      await user.save();
+      logger.info(`New Google user created: ${email}`);
+    } else {
+      // Actualizar usuario existente
+      user.lastLogin = new Date();
+      if (photoURL && !user.photoURL) {
+        user.photoURL = photoURL;
+      }
+      await user.save();
+      logger.info(`Existing Google user logged in: ${email}`);
+    }
+
+    // Generar JWT
+    const token = jwt.sign(
+      { 
+        id: user._id, 
+        email: user.email, 
+        role: user.role 
+      },
+      process.env.JWT_SECRET || 'fallback-secret-key',
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Login con Google exitoso',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        photoURL: user.photoURL
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error en Google sign-in:', error);
+    res.status(500).json({ 
+      message: 'Error interno del servidor' 
+    });
   }
 });
 

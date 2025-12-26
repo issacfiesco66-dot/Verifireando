@@ -173,6 +173,7 @@ const ContactPage = () => {
                         <input
                           id="name"
                           type="text"
+                          autoComplete="name"
                           className={`input input-md w-full pl-10 ${errors.name ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
                           placeholder="Tu nombre completo"
                           {...register('name', {
@@ -201,6 +202,7 @@ const ContactPage = () => {
                         <input
                           id="email"
                           type="email"
+                          autoComplete="email"
                           className={`input input-md w-full pl-10 ${errors.email ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
                           placeholder="tu@email.com"
                           {...register('email', {
@@ -231,6 +233,7 @@ const ContactPage = () => {
                         <input
                           id="phone"
                           type="tel"
+                          autoComplete="tel"
                           className="input input-md w-full pl-10"
                           placeholder="+52 55 1234 5678"
                           {...register('phone')}

@@ -134,10 +134,7 @@ const driverSchema = new mongoose.Schema({
 });
 
 // Índices
-driverSchema.index({ email: 1 });
 driverSchema.index({ phone: 1 });
-driverSchema.index({ licenseNumber: 1 });
-driverSchema.index({ 'vehicleInfo.plates': 1 });
 driverSchema.index({ location: '2dsphere' });
 driverSchema.index({ isOnline: 1, isAvailable: 1 });
 

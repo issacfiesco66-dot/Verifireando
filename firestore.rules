@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function userDoc() {
+      return isSignedIn() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data : null;
+    }
+    function userRole() {
+      return userDoc() != null && userDoc().role != null ? userDoc().role : 'client';
+    }
+    function isAdmin() {
+      return userRole() == 'admin';
+    }
+    function isOwner() {
+      return isSignedIn() && resource.data.ownerId == request.auth.uid;
+    }
+    function willBeOwner() {
+      return isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+    }
+
+    // Users: cada usuario puede leer/editar su propio documento; admin puede todo
+    match /users/{uid} {
+      allow create: if isSignedIn() && uid == request.auth.uid;
+      allow read: if isSignedIn() && (uid == request.auth.uid || isAdmin());
+      allow update, delete: if isSignedIn() && (uid == request.auth.uid || isAdmin());
+    }
+
+    // Drivers: solo admin puede escribir; lectura autenticada
+    match /drivers/{docId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Citas: dueño o admin
+    match /citas/{docId} {
+      allow create: if willBeOwner();
+      allow read, update, delete: if isOwner() || isAdmin();
+    }
+
+    // Regla general: documentos con ownerId sólo accesibles por su dueño o admin
+    match /{collection}/{docId} {
+      allow create: if isSignedIn() && willBeOwner();
+      allow read, update, delete: if isOwner() || isAdmin();
+    }
+  }
+}

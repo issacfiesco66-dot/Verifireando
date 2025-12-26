@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom'
 import { 
   Home, 
   Calendar, 
@@ -22,7 +22,7 @@ const DriverLayout = () => {
   const location = useLocation()
 
   const navigation = [
-    { name: 'Dashboard', href: '/driver', icon: Home },
+    { name: 'Dashboard', href: '/driver/dashboard', icon: Home },
     { name: 'Mis Citas', href: '/driver/appointments', icon: Calendar },
     { name: 'Mapa', href: '/driver/map', icon: Map },
     { name: 'Ganancias', href: '/driver/earnings', icon: DollarSign },
@@ -40,8 +40,8 @@ const DriverLayout = () => {
   }
 
   const isActive = (href) => {
-    if (href === '/driver') {
-      return location.pathname === '/driver'
+    if (href === '/driver/dashboard') {
+      return location.pathname === '/driver/dashboard' || location.pathname === '/driver' || location.pathname === '/driver/'
     }
     return location.pathname.startsWith(href)
   }
@@ -60,10 +60,13 @@ const DriverLayout = () => {
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
             {navigation.map((item) => (
-              <a
+              <button
                 key={item.name}
-                href={item.href}
-                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                onClick={() => {
+                  navigate(item.href)
+                  setSidebarOpen(false)
+                }}
+                className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
                   isActive(item.href)
                     ? 'bg-green-100 text-green-900'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -71,7 +74,7 @@ const DriverLayout = () => {
               >
                 <item.icon className="mr-3 h-5 w-5" />
                 {item.name}
-              </a>
+              </button>
             ))}
           </nav>
         </div>
@@ -85,10 +88,12 @@ const DriverLayout = () => {
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
             {navigation.map((item) => (
-              <a
+              <button
                 key={item.name}
-                href={item.href}
-                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
+                onClick={() => {
+                  navigate(item.href)
+                }}
+                className={`w-full group flex items-center px-2 py-2 text-sm font-medium rounded-md ${
                   isActive(item.href)
                     ? 'bg-green-100 text-green-900'
                     : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
@@ -96,7 +101,7 @@ const DriverLayout = () => {
               >
                 <item.icon className="mr-3 h-5 w-5" />
                 {item.name}
-              </a>
+              </button>
             ))}
           </nav>
         </div>

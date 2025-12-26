@@ -6,6 +6,20 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// Logging para todas las peticiones a /api/users
+router.use((req, res, next) => {
+  logger.info(`=== USERS ROUTE: ${req.method} ${req.originalUrl} ===`);
+  logger.info(`=== USERS ROUTE: req.userId = ${req.userId}, req.userRole = ${req.userRole} ===`);
+  next();
+});
+
+// Middleware catch-all para debugging
+router.use('*', (req, res, next) => {
+  logger.info(`=== USERS CATCH-ALL: ${req.method} ${req.originalUrl} ===`);
+  logger.info(`=== USERS CATCH-ALL: req.userId = ${req.userId}, req.userRole = ${req.userRole} ===`);
+  next();
+});
+
 // Esquemas de validación
 const updateUserSchema = Joi.object({
   name: Joi.string().min(2).max(100),
@@ -80,6 +94,26 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
 
   } catch (error) {
     logger.error('Error obteniendo usuarios:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Obtener configuración del usuario
+router.get('/settings', auth, async (req, res) => {
+  logger.info('=== SETTINGS ENDPOINT: START ===');
+  try {
+    logger.info('=== SETTINGS ENDPOINT: INSIDE TRY ===');
+    
+    // Respuesta simple para depurar
+    res.json({ 
+      message: 'Settings endpoint working',
+      userId: req.userId,
+      userRole: req.userRole
+    });
+    
+    logger.info('=== SETTINGS ENDPOINT: RESPONSE SENT ===');
+  } catch (error) {
+    logger.error('=== SETTINGS ENDPOINT: ERROR ===', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
@@ -363,6 +397,38 @@ router.get('/:id/activity', auth, async (req, res) => {
     logger.error('Error obteniendo actividad del usuario:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
+});
+
+// Actualizar configuración del usuario
+router.put('/settings', auth, async (req, res) => {
+  try {
+    const { settings } = req.body;
+    
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+
+    // Actualizar preferencias del usuario
+    user.preferences = settings;
+    await user.save();
+
+    res.json({ message: 'Configuración actualizada exitosamente', settings: user.preferences });
+  } catch (error) {
+    logger.error('Error actualizando configuración del usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Endpoint de prueba público para verificar que el servidor funciona sin auth
+router.get('/test-public', async (req, res) => {
+  console.log('🔍 [DEBUG] Endpoint /users/test-public llamado');
+  res.json({ 
+    message: 'Este endpoint funciona sin autenticación', 
+    timestamp: new Date(),
+    server: 'Backend funcionando correctamente'
+  });
 });
 
 module.exports = router;

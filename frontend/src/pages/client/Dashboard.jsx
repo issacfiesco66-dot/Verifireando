@@ -317,12 +317,12 @@ const Dashboard = () => {
                 <div className="ml-3">
                   <h3 className="font-semibold">Perfil</h3>
                   <p className="text-primary-100 text-sm">
-                    {user?.emailVerified ? 'Verificado' : 'Pendiente verificación'}
+                    {user?.isVerified ? 'Verificado' : 'Pendiente verificación'}
                   </p>
                 </div>
               </div>
               
-              {!user?.emailVerified && (
+              {!user?.isVerified && (
                 <div className="bg-white bg-opacity-20 rounded-lg p-4 mb-4">
                   <p className="text-sm mb-2">
                     Verifica tu email para acceder a todas las funciones

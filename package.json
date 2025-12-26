@@ -14,7 +14,7 @@
     "build:production": "node build-production.js",
     "start:backend": "cd backend && npm start",
     "start:frontend": "cd frontend && npm run preview",
-    "start": "node backend/server.js",
+    "start": "cd backend && npm start",
     "build": "cd frontend && npm install --legacy-peer-deps && npm run build",
     "test:backend": "cd backend && npm test",
     "test:frontend": "cd frontend && npm test",
@@ -47,7 +47,7 @@
   },
   "packageManager": "npm@9.0.0",
   "engines": {
-    "node": "18.x"
+    "node": "22.x"
   },
   "repository": {
     "type": "git",

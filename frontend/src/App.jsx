@@ -1,7 +1,6 @@
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
-import { useNotification } from './contexts/NotificationContext'
 
 // Layouts
 import PublicLayout from './layouts/PublicLayout'
@@ -15,6 +14,7 @@ import LoginPage from './pages/auth/Login'
 import RegisterPage from './pages/auth/Register'
 import ForgotPasswordPage from './pages/auth/ForgotPassword'
 import ResetPasswordPage from './pages/auth/ResetPassword'
+import VerifyEmailPage from './pages/auth/VerifyEmail'
 import AboutPage from './pages/AboutPage'
 import ContactPage from './pages/ContactPage'
 import PricingPage from './pages/PricingPage'
@@ -24,17 +24,23 @@ import ServicesPage from './pages/ServicesPage'
 // Client Pages
 import ClientDashboard from './pages/client/Dashboard'
 import ClientCars from './pages/client/Cars'
+import NewCar from './pages/client/NewCar'
+import EditCar from './pages/client/EditCar'
 import ClientAppointments from './pages/client/Appointments'
+import AppointmentDetails from './pages/client/AppointmentDetails'
 import ClientProfile from './pages/client/Profile'
 import ClientPayments from './pages/client/Payments'
+import ClientSettings from './pages/client/Settings'
 import BookAppointment from './pages/client/NewAppointment'
 
 // Driver Pages
 import DriverDashboard from './pages/driver/Dashboard'
 import DriverAppointments from './pages/driver/Appointments'
+import AppointmentManagement from './pages/driver/AppointmentManagement'
 import DriverProfile from './pages/driver/Profile'
 import DriverEarnings from './pages/driver/Earnings'
 import DriverMap from './pages/driver/Map'
+import DriverSettings from './pages/driver/Settings'
 
 // Admin Pages
 import AdminDashboard from './pages/admin/Dashboard'
@@ -50,32 +56,27 @@ import AdminSettings from './pages/admin/Settings'
 import LoadingSpinner from './components/common/LoadingSpinner'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import NotificationHandler from './components/common/NotificationHandler'
+import NotificationInitializer from './components/common/NotificationInitializer'
 import PWAInstallPrompt from './components/pwa/PWAInstallPrompt'
-
-// PWA Services
-import pwaService from './services/pwaService'
-import pushNotificationService from './services/pushNotificationService'
 
 function App() {
   const { user, loading } = useAuth()
-  const { requestPermission } = useNotification()
 
-  // Initialize PWA services
+  // Request push notification permission for PWA when user is available (only in production)
   React.useEffect(() => {
-    // Initialize PWA service
-    pwaService.init().catch(console.error)
-    
-    // Initialize push notification service
-    pushNotificationService.init().catch(console.error)
-  }, [])
-
-  // Request notification permission on app load
-  React.useEffect(() => {
-    if (user) {
-      requestPermission()
-      
-      // Request push notification permission for PWA
-      pushNotificationService.requestPermission().catch(console.error)
+    if (user && !import.meta.env.DEV) {
+      // Dynamically import PWA services only in production
+      Promise.all([
+        import('./services/pwaService'),
+        import('./services/pushNotificationService')
+      ]).then(([pwaModule, pushModule]) => {
+        const pwaService = pwaModule.default;
+        const pushNotificationService = pushModule.default;
+        
+        if (pwaService.swRegistration) {
+          pushNotificationService.requestPermission().catch(console.error)
+        }
+      }).catch(console.error);
     }
   }, [user])
 
@@ -106,6 +107,7 @@ function App() {
           <Route path="register" element={<RegisterPage />} />
           <Route path="forgot-password" element={<ForgotPasswordPage />} />
           <Route path="reset-password" element={<ResetPasswordPage />} />
+          <Route path="verify-email" element={<VerifyEmailPage />} />
         </Route>
 
         {/* Client Routes */}
@@ -120,10 +122,15 @@ function App() {
           <Route index element={<Navigate to="/client/dashboard" replace />} />
           <Route path="dashboard" element={<ClientDashboard />} />
           <Route path="cars" element={<ClientCars />} />
+          <Route path="cars/new" element={<NewCar />} />
+          <Route path="cars/edit/:id" element={<EditCar />} />
           <Route path="appointments" element={<ClientAppointments />} />
+          <Route path="appointments/new" element={<BookAppointment />} />
+          <Route path="appointments/:id" element={<AppointmentDetails />} />
           <Route path="book-appointment" element={<BookAppointment />} />
           <Route path="payments" element={<ClientPayments />} />
           <Route path="profile" element={<ClientProfile />} />
+          <Route path="settings" element={<ClientSettings />} />
         </Route>
 
         {/* Driver Routes */}
@@ -138,9 +145,11 @@ function App() {
           <Route index element={<Navigate to="/driver/dashboard" replace />} />
           <Route path="dashboard" element={<DriverDashboard />} />
           <Route path="appointments" element={<DriverAppointments />} />
+          <Route path="manage-appointments" element={<AppointmentManagement />} />
           <Route path="map" element={<DriverMap />} />
           <Route path="earnings" element={<DriverEarnings />} />
           <Route path="profile" element={<DriverProfile />} />
+          <Route path="settings" element={<DriverSettings />} />
         </Route>
 
         {/* Admin Routes */}
@@ -205,6 +214,7 @@ function App() {
       </Routes>
 
       {/* Global Components */}
+      <NotificationInitializer />
       <NotificationHandler />
       <PWAInstallPrompt />
     </>

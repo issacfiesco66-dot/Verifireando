@@ -62,6 +62,60 @@ const updateCarSchema = Joi.object({
   })
 });
 
+// Handler para obtener mis vehículos
+const getMyCarsHandler = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    
+    const filter = { owner: req.userId };
+    
+    // Filtro de búsqueda
+    if (req.query.search) {
+      filter.$or = [
+        { plates: { $regex: req.query.search, $options: 'i' } },
+        { brand: { $regex: req.query.search, $options: 'i' } },
+        { model: { $regex: req.query.search, $options: 'i' } },
+        { color: { $regex: req.query.search, $options: 'i' } }
+      ];
+    }
+
+    // Filtro por estado activo
+    if (req.query.isActive !== undefined) {
+      filter.isActive = req.query.isActive === 'true';
+    }
+
+    const cars = await Car.find(filter)
+      .populate('owner', 'name email phone')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Car.countDocuments(filter);
+
+    res.json({
+      cars,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error obteniendo mis vehículos:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+};
+
+// Obtener mis vehículos (ruta específica para usuarios)
+router.get('/my-cars', auth, getMyCarsHandler);
+
+// Alias para obtener mis vehículos (para evitar 404 si frontend usa ruta distinta)
+router.get('/my', auth, getMyCarsHandler);
+
 // Obtener todos los vehículos
 router.get('/', auth, async (req, res) => {
   try {
@@ -327,9 +381,9 @@ router.post('/:id/verification', auth, authorize('admin'), async (req, res) => {
     const { id } = req.params;
     const { status, notes, expiryDate, inspector } = req.body;
 
-    if (!['passed', 'failed', 'pending'].includes(status)) {
+    if (!['approved', 'rejected', 'pending'].includes(status)) {
       return res.status(400).json({ 
-        message: 'Estado debe ser "passed", "failed" o "pending"' 
+        message: 'Estado debe ser "approved", "rejected" o "pending"' 
       });
     }
 
@@ -340,10 +394,10 @@ router.post('/:id/verification', auth, authorize('admin'), async (req, res) => {
 
     const verification = {
       date: new Date(),
-      status,
+      result: status,
       notes: notes || '',
       inspector: inspector || req.user.name,
-      expiryDate: status === 'passed' ? expiryDate : null
+      nextVerificationDue: status === 'approved' ? expiryDate : null
     };
 
     car.addVerification(verification);
@@ -357,7 +411,7 @@ router.post('/:id/verification', auth, authorize('admin'), async (req, res) => {
       type: 'verification_result',
       channel: 'push',
       title: 'Resultado de Verificación',
-      message: status === 'passed' 
+      message: status === 'approved' 
         ? `Tu vehículo ${car.plates} ha pasado la verificación exitosamente.`
         : `Tu vehículo ${car.plates} no pasó la verificación. ${notes || ''}`,
       data: {

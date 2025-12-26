@@ -87,8 +87,51 @@ const Earnings = () => {
   }
 
   const exportEarnings = () => {
-    // Implement export functionality
-    console.log('Exporting earnings...')
+    try {
+      // Crear contenido CSV
+      const headers = ['Fecha', 'Hora', 'Servicio', 'Ubicación', 'Monto', 'Comisión', 'Estado']
+      const csvContent = [
+        headers.join(','),
+        ...earnings.map(earning => [
+          earning.date,
+          earning.time,
+          `"${earning.service}"`,
+          `"${earning.location}"`,
+          earning.amount,
+          earning.commission,
+          earning.status
+        ].join(','))
+      ].join('\n')
+      
+      // Agregar resumen al final
+      const summaryContent = [
+        '',
+        'RESUMEN',
+        `Hoy,${formatCurrency(summary.today)}`,
+        `Esta semana,${formatCurrency(summary.week)}`,
+        `Este mes,${formatCurrency(summary.month)}`,
+        `Total,${formatCurrency(summary.total)}`
+      ].join('\n')
+      
+      const finalContent = csvContent + summaryContent
+      
+      // Crear y descargar el archivo
+      const blob = new Blob([finalContent], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ganancias_${selectedPeriod}_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      // Mostrar notificación de éxito (simulado con alert ya que no hay toast importado)
+      alert('Ganancias exportadas correctamente')
+    } catch (error) {
+      console.error('Error al exportar ganancias:', error)
+      alert('Error al exportar ganancias')
+    }
   }
 
   if (loading) {

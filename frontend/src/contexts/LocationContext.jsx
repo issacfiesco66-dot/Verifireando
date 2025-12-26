@@ -178,28 +178,29 @@ export const LocationProvider = ({ children }) => {
         }
       },
       (error) => {
-        console.error('Watch position error:', error)
         let errorMessage = 'Error watching location'
         
         switch (error.code) {
           case error.PERMISSION_DENIED:
+            console.error('Watch position error: Permission denied')
             errorMessage = 'Acceso a ubicación denegado'
             stopWatching()
             break
           case error.POSITION_UNAVAILABLE:
+            console.warn('Watch position: Position unavailable')
             errorMessage = 'Ubicación no disponible'
             break
           case error.TIMEOUT:
-            errorMessage = 'Tiempo de espera agotado'
-            break
+            // No mostrar error en consola para timeouts, es normal en interiores
+            return
         }
         
         dispatch({ type: 'SET_ERROR', payload: errorMessage })
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 60000, // 1 minute
+        timeout: 30000,
+        maximumAge: 120000, // 2 minutes
       }
     )
   }
@@ -216,8 +217,10 @@ export const LocationProvider = ({ children }) => {
   // Get address from coordinates using reverse geocoding
   const getAddressFromCoordinates = async (latitude, longitude) => {
     try {
+      // Usar token de Mapbox para desarrollo
+      const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw';
       const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${import.meta.env.VITE_MAPBOX_ACCESS_TOKEN}&language=es`
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxToken}&language=es`
       )
       
       if (response.ok) {
@@ -233,6 +236,11 @@ export const LocationProvider = ({ children }) => {
     }
     return null
   }
+
+  // Alias para reverseGeocode (compatibilidad)
+  const reverseGeocode = async (longitude, latitude) => {
+    return await getAddressFromCoordinates(latitude, longitude);
+  };
 
   // Get coordinates from address using geocoding
   const getCoordinatesFromAddress = async (address) => {
@@ -302,11 +310,9 @@ export const LocationProvider = ({ children }) => {
     }
     
     return () => {
-      if (user?.role === 'driver') {
-        stopWatching()
-      }
+      stopWatching()
     }
-  }, [user, state.permission])
+  }, []) // Sin dependencias para evitar bucles infinitos
 
   const value = {
     currentLocation: state.currentLocation,
@@ -321,6 +327,7 @@ export const LocationProvider = ({ children }) => {
     stopWatching,
     getAddressFromCoordinates,
     getCoordinatesFromAddress,
+    reverseGeocode,
     calculateDistance,
     findNearbyDrivers,
     requestLocationPermission,

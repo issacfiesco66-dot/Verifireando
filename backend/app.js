@@ -9,12 +9,16 @@ const path = require('path');
 const http = require('http');
 const socketIo = require('socket.io');
 const fs = require('fs');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Importar utilidades
 const logger = require('./utils/logger');
 const { connectDB } = require('./config/database');
 const { mockMongoose } = require('./config/mockDatabase');
+const { initializeFirebase } = require('./config/firebase');
+
+// Inicializar Firebase
+initializeFirebase();
 
 // Importar rutas
 const authRoutes = require('./routes/auth'); // Usando MongoDB Atlas
@@ -23,9 +27,11 @@ const driverRoutes = require('./routes/drivers');
 const carRoutes = require('./routes/cars');
 const appointmentRoutes = require('./routes/appointments');
 const paymentRoutes = require('./routes/payments');
+const publicPaymentRoutes = require('./routes/public-payments');
 const notificationRoutes = require('./routes/notifications');
 const serviceRoutes = require('./routes/services');
 const diagnosticsRoutes = require('./routes/diagnostics');
+const adminRoutes = require('./routes/admin');
 
 // Crear aplicación Express
 const app = express();
@@ -39,8 +45,10 @@ const io = socketIo(server, {
       const defaultOrigins = [
         'http://localhost:3000',
         'http://localhost:5173',
+        'http://localhost:5174', // Puerto actual del frontend
         'https://localhost:3000',
-        'https://localhost:5173'
+        'https://localhost:5173',
+        'https://localhost:5174' // Puerto actual del frontend
       ];
       
       const envOrigins = process.env.ALLOWED_ORIGINS 
@@ -79,8 +87,10 @@ const corsOptions = {
     const defaultOrigins = [
       'http://localhost:3000',
       'http://localhost:5173', // Vite dev server
+      'http://localhost:5174', // Puerto actual del frontend
       'https://localhost:3000',
-      'https://localhost:5173'
+      'https://localhost:5173',
+      'https://localhost:5174' // Puerto actual del frontend
     ];
     
     // Obtener dominios adicionales desde variables de entorno
@@ -148,7 +158,7 @@ const limiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: process.env.NODE_ENV === 'production' ? 5 : 50, // 50 intentos en desarrollo, 5 en producción
+  max: process.env.NODE_ENV === 'production' ? 5 : 500, // 500 intentos en desarrollo (React StrictMode), 5 en producción
   message: {
     error: 'Demasiados intentos de autenticación, intenta de nuevo más tarde.'
   },
@@ -208,9 +218,11 @@ app.use('/api/drivers', driverRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/public-payments', publicPaymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Ruta para servir el frontend en producción
 if (process.env.NODE_ENV === 'production') {
@@ -313,10 +325,24 @@ io.on('connection', (socket) => {
     logger.info(`Usuario ${userId} se unió a su sala`);
   });
 
-  // Unirse a sala de chofer
-  socket.on('join-driver-room', (driverId) => {
+  // Unirse a sala de chofer y marcar como en línea
+  socket.on('join-driver-room', async (driverId) => {
     socket.join(`driver-${driverId}`);
     logger.info(`Chofer ${driverId} se unió a su sala`);
+    
+    // Marcar conductor como en línea
+    try {
+      const Driver = require('./models/Driver');
+      await Driver.findByIdAndUpdate(driverId, { isOnline: true });
+      
+      // Emitir lista de conductores en línea actualizada
+      const onlineDrivers = await Driver.find({ isOnline: true }).select('_id name email');
+      io.emit('drivers-online', onlineDrivers);
+      
+      logger.info(`Chofer ${driverId} marcado como en línea`);
+    } catch (error) {
+      logger.error('Error al actualizar estado del conductor:', error);
+    }
   });
 
   // Unirse a sala de cita
@@ -327,6 +353,11 @@ io.on('connection', (socket) => {
 
   // Unirse a sala genérica (compatibilidad con frontend)
   socket.on('join-room', (room) => {
+    // Validar que room sea un string válido
+    if (typeof room !== 'string') {
+        logger.warn(`Intento de unirse a sala inválida: ${typeof room} ${JSON.stringify(room)}`);
+        return;
+    }
     socket.join(room);
     logger.info(`Cliente ${socket.id} se unió a sala ${room}`);
   });
@@ -380,8 +411,29 @@ io.on('connection', (socket) => {
   });
 
   // Desconexión
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     logger.info(`Cliente desconectado: ${socket.id}`);
+    
+    // Si era un conductor, marcar como fuera de línea
+    try {
+      // Obtener el ID del conductor desde las salas del socket
+      const rooms = Array.from(socket.rooms);
+      const driverRoom = rooms.find(room => room.startsWith('driver-'));
+      
+      if (driverRoom) {
+        const driverId = driverRoom.replace('driver-', '');
+        const Driver = require('./models/Driver');
+        await Driver.findByIdAndUpdate(driverId, { isOnline: false });
+        
+        // Emitir lista de conductores en línea actualizada
+        const onlineDrivers = await Driver.find({ isOnline: true }).select('_id name email');
+        io.emit('drivers-online', onlineDrivers);
+        
+        logger.info(`Chofer ${driverId} marcado como fuera de línea`);
+      }
+    } catch (error) {
+      logger.error('Error al actualizar estado del conductor al desconectar:', error);
+    }
   });
 
   // Manejo de errores de socket
@@ -402,10 +454,50 @@ async function startServer() {
       logger.warn('⚠️  Iniciando sin conexión a base de datos');
     }
     
+    // Auto-seed en desarrollo si la base de datos está vacía (común con in-memory)
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        const User = require('./models/User');
+        const Service = require('./models/Service');
+        const userCount = await User.countDocuments();
+        const serviceCount = await Service.countDocuments();
+        
+        if (userCount === 0) {
+          logger.info('🌱 Base de datos vacía detectada en desarrollo. Ejecutando seed automático...');
+          const { createUsers, createDrivers, createCars } = require('./scripts/seed');
+          const users = await createUsers();
+          const drivers = await createDrivers();
+          const cars = await createCars(users);
+          
+          if (users.length > 0 && drivers.length > 0) {
+              logger.info('✅ Seed automático completado: Usuarios y Choferes creados.');
+              logger.info('   👤 Cliente: juan@example.com / password123');
+              logger.info('   🚗 Chofer: roberto@example.com / driver123');
+              if (cars.length > 0) {
+                  logger.info(`   🚙 Auto creado para Juan: ${cars[0].plates}`);
+              }
+          }
+        }
+        
+        // Seed de servicios si no existen
+        if (serviceCount === 0) {
+          logger.info('🔧 Creando servicios...');
+          const { services } = require('./scripts/seedServices');
+          const createdServices = await Service.insertMany(services);
+          logger.info(`✅ ${createdServices.length} servicios creados`);
+        }
+      } catch (seedError) {
+        logger.error('❌ Error en seed automático:', seedError);
+      }
+    }
+
+    // Hacer io disponible para las rutas
+    app.set('io', io);
+
     // Iniciar servidor
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
-      logger.info(`🚀 Servidor iniciado en puerto ${PORT}`);
+      logger.info(`Servidor corriendo en puerto ${PORT}`);
       logger.info(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`📊 Health check: http://localhost:${PORT}/health`);
       

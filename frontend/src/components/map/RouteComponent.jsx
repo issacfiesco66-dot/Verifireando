@@ -18,7 +18,8 @@ import LoadingSpinner from '../common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 // Set Mapbox access token
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
+mapboxgl.accessToken = MAPBOX_TOKEN
 
 const RouteComponent = ({
   origin,
@@ -32,6 +33,19 @@ const RouteComponent = ({
   height = '400px',
   className = ''
 }) => {
+  // If token is missing, render a friendly fallback instead of initializing Mapbox
+  const isTokenMissing = !MAPBOX_TOKEN
+  if (isTokenMissing) {
+    return (
+      <div className={`flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg ${className}`} style={{ height }}>
+        <div className="text-center p-4">
+          <p className="text-gray-700 font-semibold">Navegación deshabilitada</p>
+          <p className="text-sm text-gray-500 mt-1">Falta configurar la variable <code>VITE_MAPBOX_ACCESS_TOKEN</code>.</p>
+        </div>
+      </div>
+    )
+  }
+
   const mapContainer = useRef(null)
   const map = useRef(null)
   const [loading, setLoading] = useState(true)

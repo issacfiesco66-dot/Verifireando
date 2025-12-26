@@ -15,39 +15,61 @@ export const SocketProvider = ({ children }) => {
   const maxReconnectAttempts = 5
 
   useEffect(() => {
-    if (user && token) {
+    // Evitar crear múltiples sockets
+    if (user && token && !socket) {
       initializeSocket()
-    } else {
+    } else if (!user || !token) {
       disconnectSocket()
     }
 
     return () => {
       disconnectSocket()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, token])
 
   const initializeSocket = () => {
-    const newSocket = io(import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000', {
+    // Limpiar socket existente antes de crear uno nuevo
+    if (socket) {
+      socket.disconnect()
+    }
+
+    const apiUrl = import.meta.env.VITE_API_URL
+    const socketUrl = import.meta.env.VITE_SOCKET_URL
+    const isLocalhost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+
+    // Usar VITE_SOCKET_URL o derivar de VITE_API_URL
+    const resolvedSocketUrl = socketUrl || (apiUrl ? new URL(apiUrl).origin : (isLocalhost ? 'http://localhost:5000' : window.location.origin))
+
+    const newSocket = io(resolvedSocketUrl, {
       auth: {
         token,
       },
-      transports: ['websocket', 'polling'],
+      path: '/socket.io',
+      transports: ['polling', 'websocket'],
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
       timeout: 20000,
-      forceNew: true,
+      forceNew: false,
     })
 
     // Connection events
     newSocket.on('connect', () => {
-      console.log('Socket connected:', newSocket.id)
+      console.log('Socket connected:', newSocket.id, 'URL:', resolvedSocketUrl)
       setConnected(true)
       reconnectAttempts.current = 0
       
       // Join user-specific room
       if (user) {
-        newSocket.emit('join-room', {
-          userId: user._id,
-          role: user.role,
-        })
+        // Unirse a sala de usuario según su rol
+        if (user.role === 'driver') {
+          newSocket.emit('join-driver-room', user._id)
+        } else {
+          newSocket.emit('join-user-room', user._id)
+        }
+        // También unirse a sala genérica para compatibilidad
+        newSocket.emit('join-room', `user-${user._id}`)
       }
     })
 

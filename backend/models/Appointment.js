@@ -37,11 +37,33 @@ const appointmentSchema = new mongoose.Schema({
     additionalServices: [{
       name: {
         type: String,
-        enum: ['wash', 'oil_change', 'tire_check', 'battery_check', 'brake_check'],
+        enum: [
+          'wash',           // Lavado de auto
+          'oil_change',     // Cambio de aceite
+          'spark_plugs',    // Cambio de bujías
+          'brakes',         // Frenos
+          'air_filter',     // Filtro de aire
+          'tire_check',     // Revisión de llantas
+          'battery_check',  // Revisión de batería
+          'brake_check',    // Revisión de frenos
+          'transmission',   // Transmisión
+          'cooling_system', // Sistema de enfriamiento
+          'electrical',     // Sistema eléctrico
+          'suspension',     // Suspensión
+          'exhaust',        // Sistema de escape
+          'fuel_system'     // Sistema de combustible
+        ],
         required: true
       },
       price: { type: Number, required: true },
-      description: String
+      description: String,
+      completed: { type: Boolean, default: false },
+      completedAt: Date,
+      evidence: [{
+        url: String, // URL de foto/video
+        description: String,
+        uploadedAt: { type: Date, default: Date.now }
+      }]
     }]
   },
   pickupAddress: {
@@ -157,7 +179,6 @@ const appointmentSchema = new mongoose.Schema({
 appointmentSchema.index({ client: 1 });
 appointmentSchema.index({ driver: 1 });
 appointmentSchema.index({ car: 1 });
-appointmentSchema.index({ appointmentNumber: 1 });
 appointmentSchema.index({ scheduledDate: 1 });
 appointmentSchema.index({ status: 1 });
 appointmentSchema.index({ 'pickupAddress.coordinates.coordinates': '2dsphere' });

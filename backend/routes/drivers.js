@@ -108,6 +108,116 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Obtener estadísticas del chofer actual (autenticado)
+router.get('/stats', auth, authorize(['driver']), async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.userId);
+    if (!driver) {
+      return res.status(404).json({ message: 'Chofer no encontrado' });
+    }
+
+    // Estadísticas de citas
+    const totalAppointments = await Appointment.countDocuments({ driver: req.userId });
+    const completedAppointments = await Appointment.countDocuments({ 
+      driver: req.userId, 
+      status: 'delivered' 
+    });
+    const cancelledAppointments = await Appointment.countDocuments({ 
+      driver: req.userId, 
+      status: 'cancelled' 
+    });
+
+    // Citas del mes actual
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+    
+    const monthlyAppointments = await Appointment.countDocuments({
+      driver: req.userId,
+      createdAt: { $gte: startOfMonth }
+    });
+
+    // Ganancias del mes
+    const monthlyEarnings = await Appointment.aggregate([
+      {
+        $match: {
+          driver: driver._id,
+          status: 'delivered',
+          createdAt: { $gte: startOfMonth }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$price' }
+        }
+      }
+    ]);
+
+    res.json({
+      totalAppointments,
+      completedAppointments,
+      cancelledAppointments,
+      monthlyAppointments,
+      monthlyEarnings: monthlyEarnings[0]?.total || 0,
+      rating: typeof driver.rating === 'object' ? (driver.rating.average || 0) : (driver.rating || 0),
+      totalRatings: typeof driver.rating === 'object' ? (driver.rating.count || 0) : (driver.totalRatings || 0)
+    });
+
+  } catch (error) {
+    logger.error('Error obteniendo estadísticas del chofer:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Obtener información del vehículo del chofer actual
+router.get('/vehicle', auth, authorize(['driver']), async (req, res) => {
+  try {
+    const driver = await Driver.findById(req.userId).select('vehicleInfo');
+    if (!driver) {
+      return res.status(404).json({ message: 'Chofer no encontrado' });
+    }
+
+    res.json(driver.vehicleInfo || {});
+
+  } catch (error) {
+    logger.error('Error obteniendo información del vehículo:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Actualizar información del vehículo del chofer actual
+router.put('/vehicle', auth, authorize(['driver']), async (req, res) => {
+  try {
+    const { brand, model, year, plates, color, photos } = req.body;
+
+    const driver = await Driver.findById(req.userId);
+    if (!driver) {
+      return res.status(404).json({ message: 'Chofer no encontrado' });
+    }
+
+    driver.vehicleInfo = {
+      brand: brand || driver.vehicleInfo?.brand,
+      model: model || driver.vehicleInfo?.model,
+      year: year || driver.vehicleInfo?.year,
+      plates: plates || driver.vehicleInfo?.plates,
+      color: color || driver.vehicleInfo?.color,
+      photos: photos || driver.vehicleInfo?.photos || []
+    };
+
+    await driver.save();
+
+    res.json({
+      message: 'Información del vehículo actualizada exitosamente',
+      vehicleInfo: driver.vehicleInfo
+    });
+
+  } catch (error) {
+    logger.error('Error actualizando información del vehículo:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
 // Obtener chofer por ID
 router.get('/:id', async (req, res) => {
   try {
@@ -251,7 +361,7 @@ router.put('/:id/location', auth, async (req, res) => {
     });
 
     activeAppointments.forEach(appointment => {
-      req.io.to(appointment._id.toString()).emit('location-update', {
+      req.io.to(`appointment-${appointment._id.toString()}`).emit('location-update', {
         driverId: id,
         location: {
           lat: value.lat,
@@ -504,10 +614,10 @@ router.get('/:id/stats', auth, async (req, res) => {
         completed: completedAppointments,
         cancelled: cancelledAppointments,
         completionRate: totalAppointments > 0 ? (completedAppointments / totalAppointments * 100).toFixed(1) : 0,
-        rating: driver.rating,
+        rating: driver.rating?.average || 0,
         monthlyAppointments,
         monthlyEarnings: monthlyEarningsTotal,
-        totalEarnings: driver.earnings
+        totalEarnings: driver.earnings?.total || 0
       }
     });
 

@@ -302,7 +302,7 @@ const Users = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Verificados</p>
               <p className="text-2xl font-bold text-gray-900">
-                {users.filter(u => u.emailVerified).length}
+                {users.filter(u => u.isVerified).length}
               </p>
             </div>
           </div>
@@ -561,11 +561,11 @@ const Users = () => {
                     Email Verificado
                   </label>
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    selectedUser.emailVerified 
+                    selectedUser.isVerified 
                       ? 'bg-green-100 text-green-800' 
                       : 'bg-yellow-100 text-yellow-800'
                   }`}>
-                    {selectedUser.emailVerified ? 'Sí' : 'No'}
+                    {selectedUser.isVerified ? 'Sí' : 'No'}
                   </span>
                 </div>
               </div>

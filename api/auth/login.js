@@ -53,7 +53,7 @@ module.exports = async function handler(req, res) {
 
     // Conectar a la base de datos
     const client = await connectToDatabase();
-    const db = client.db('Verifireando');
+    const db = client.db('verifireando');
     
     // Determinar la colección según el rol
     let collection;

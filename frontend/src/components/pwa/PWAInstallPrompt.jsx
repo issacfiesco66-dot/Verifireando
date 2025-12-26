@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Download, X, Smartphone, Monitor, Wifi, WifiOff } from 'lucide-react'
 import pwaService from '../../services/pwaService'
+import logger from '../../utils/logger'
 
 const PWAInstallPrompt = () => {
+  if (import.meta.env.DEV) {
+    return null
+  }
   const [showPrompt, setShowPrompt] = useState(false)
   const [isInstalling, setIsInstalling] = useState(false)
   const [appInfo, setAppInfo] = useState(pwaService.getAppInfo())
@@ -16,12 +20,13 @@ const PWAInstallPrompt = () => {
 
     // Handle install prompt availability
     const handleInstallPromptAvailable = () => {
-      updateAppInfo()
-      // Show prompt after a delay if not already installed
-      if (!appInfo.isInstalled && !localStorage.getItem('pwa-install-dismissed')) {
+      const info = pwaService.getAppInfo()
+      setAppInfo(info)
+      // Show prompt after a short delay if not already installed
+      if (!info.isInstalled && !localStorage.getItem('pwa-install-dismissed')) {
         setTimeout(() => {
           setShowPrompt(true)
-        }, 3000)
+        }, 1000)
       }
     }
 
@@ -44,6 +49,11 @@ const PWAInstallPrompt = () => {
 
     // Initial check
     updateAppInfo()
+    // If the prompt is already available (event fired before listeners), show banner
+    const info = pwaService.getAppInfo()
+    if (pwaService.deferredPrompt && !info.isInstalled && !localStorage.getItem('pwa-install-dismissed')) {
+      setShowPrompt(true)
+    }
 
     return () => {
       pwaService.off('installPromptAvailable', handleInstallPromptAvailable)
@@ -60,7 +70,7 @@ const PWAInstallPrompt = () => {
         setIsInstalling(false)
       }
     } catch (error) {
-      console.error('Error installing app:', error)
+      logger.pwa('Error installing app:', error)
       setIsInstalling(false)
     }
   }
@@ -168,7 +178,7 @@ export const PWAStatus = () => {
     try {
       await pwaService.updateServiceWorker()
     } catch (error) {
-      console.error('Error updating app:', error)
+      logger.pwa('Error updating app:', error)
       setIsUpdating(false)
     }
   }
@@ -177,7 +187,7 @@ export const PWAStatus = () => {
     try {
       await pwaService.showInstallPrompt()
     } catch (error) {
-      console.error('Error installing app:', error)
+      logger.pwa('Error installing app:', error)
     }
   }
 
