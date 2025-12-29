@@ -17,14 +17,12 @@ import {
   Star
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useSocket } from '../../contexts/SocketContext'
 import { adminService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 const Dashboard = () => {
   const { user } = useAuth()
-  const { onlineDrivers } = useSocket()
   const [stats, setStats] = useState({
     users: { total: 0, active: 0, new: 0 },
     drivers: { total: 0, active: 0, online: 0 },

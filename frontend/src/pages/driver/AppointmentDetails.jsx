@@ -22,7 +22,6 @@ import {
   MessageSquare
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import MapComponent from '../../components/map/MapComponent'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -32,7 +31,6 @@ const AppointmentDetails = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
-  const { socket } = useSocket()
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [appointment, setAppointment] = useState(null)
@@ -157,10 +155,50 @@ const AppointmentDetails = () => {
 
   const saveNotes = async () => {
     try {
-      await appointmentService.updateDriverNotes(id, { notes })
-      toast.success('Notas guardadas')
+      await appointmentService.updateAppointment(id, { notes })
+      toast.success('Notas guardadas correctamente')
     } catch (error) {
-      toast.error('Error al guardar las notas')
+      toast.error('Error al guardar notas')
+    }
+  }
+
+  const handleDownloadPhoto = async (photoUrl, fileName) => {
+    try {
+      // Crear un enlace temporal para descargar la imagen
+      const response = await fetch(photoUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${fileName}_${appointment.appointmentNumber}.jpg`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      toast.success('Foto descargada correctamente')
+    } catch (error) {
+      toast.error('Error al descargar foto')
+    }
+  }
+
+  const handleDownloadDocument = async (documentUrl, fileName) => {
+    try {
+      // Crear un enlace temporal para descargar el documento
+      const response = await fetch(documentUrl)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${fileName}_${appointment.appointmentNumber}`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      toast.success('Documento descargado correctamente')
+    } catch (error) {
+      toast.error('Error al descargar documento')
     }
   }
 
@@ -546,7 +584,10 @@ const AppointmentDetails = () => {
                           className="w-full h-32 object-cover rounded-lg"
                         />
                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-opacity rounded-lg flex items-center justify-center">
-                          <button className="opacity-0 group-hover:opacity-100 text-white p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-all">
+                          <button 
+                            onClick={() => handleDownloadPhoto(photo.url, `foto_${index + 1}`)}
+                            className="opacity-0 group-hover:opacity-100 text-white p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-all"
+                          >
                             <Download className="w-5 h-5" />
                           </button>
                         </div>
@@ -601,7 +642,10 @@ const AppointmentDetails = () => {
                             </p>
                           </div>
                         </div>
-                        <button className="btn btn-secondary btn-sm flex items-center space-x-2">
+                        <button 
+                          onClick={() => handleDownloadDocument(doc.url, doc.name)}
+                          className="btn btn-secondary btn-sm flex items-center space-x-2"
+                        >
                           <Download className="w-4 h-4" />
                           <span>Descargar</span>
                         </button>

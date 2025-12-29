@@ -138,6 +138,13 @@ carSchema.methods.getDaysUntilDue = function() {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
+// Estado de verificación actual
+carSchema.methods.getVerificationStatus = function() {
+  if (!this.nextVerificationDue) return 'never_verified';
+  const now = new Date();
+  return this.nextVerificationDue < now ? 'overdue' : 'current';
+};
+
 // Virtual para el nombre completo del vehículo
 carSchema.virtual('fullName').get(function() {
   return `${this.brand} ${this.model} ${this.year}`;

@@ -1,240 +1,204 @@
-import React, { useState, useEffect } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { Eye, EyeOff, Mail, Lock, LogIn } from 'lucide-react'
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { FcGoogle } from 'react-icons/fc'
 import { useAuth } from '../../contexts/AuthContext'
-import LoadingSpinner from '../../components/common/LoadingSpinner'
-import toast from 'react-hot-toast'
+import { signInWithGoogle } from '../../firebase.new'
 
-const Login = () => {
-  const [showPassword, setShowPassword] = useState(false)
-  const { login, loading, user } = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
+function Login() {
+  const [formData, setFormData] = useState({
+    email: '',
+    password: ''
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   
-  const from = location.state?.from?.pathname || '/'
+  const { login } = useAuth()
+  const navigate = useNavigate()
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting }
-  } = useForm()
+  const handleChange = (e) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    })
+  }
 
-  // Redirect if already logged in
-  useEffect(() => {
-    if (user) {
-      const redirectPath = user.role === 'admin' 
-        ? '/admin/dashboard' 
-        : user.role === 'driver' 
-        ? '/driver/dashboard' 
-        : '/client/dashboard'
-      
-      navigate(redirectPath, { replace: true })
-    }
-  }, [user, navigate])
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
 
-  const onSubmit = async (data) => {
     try {
-      await login({
-        email: data.email,
-        password: data.password,
-        role: data.role
+      const result = await login({
+        email: formData.email,
+        password: formData.password,
+        role: 'client'
       })
       
-      // Redirect based on user role or to intended page
-      if (from !== '/') {
-        navigate(from, { replace: true })
+      if (result.success) {
+        navigate('/')
+      } else if (result.needsVerification) {
+        navigate('/auth/verify-email', { state: { email: formData.email, userId: result.userId } })
       } else {
-        // Will be handled by the useEffect above
+        setError(result.error || 'Error al iniciar sesión')
       }
-    } catch (error) {
-      // Error is handled by AuthContext
+    } catch (err) {
+      setError(err.response?.data?.message || 'Error al iniciar sesión')
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (loading) {
-    return <LoadingSpinner fullScreen text="Iniciando sesión..." />
+  const handleGoogleSignIn = async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      const user = await signInWithGoogle()
+      
+      // Enviar el token de Firebase a tu backend
+      const token = await user.getIdToken()
+      
+      // Llamar a tu API para registrar/iniciar sesión con Google
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/google`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          idToken: token,
+          email: user.email,
+          name: user.displayName,
+          photoURL: user.photoURL
+        })
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        localStorage.setItem('token', data.token)
+        localStorage.setItem('user', JSON.stringify(data.user))
+        navigate('/')
+      } else {
+        setError(data.message || 'Error al iniciar sesión con Google')
+      }
+    } catch (err) {
+      console.error('Error signing in with Google:', err)
+      setError('Error al iniciar sesión con Google')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full">
-        {/* Logo and Title */}
-        <div className="text-center mb-8">
-          <div className="w-20 h-20 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Verifireando</h1>
-          <p className="text-gray-600">Inicia sesión en tu cuenta</p>
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Iniciar sesión
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            ¿No tienes cuenta?{' '}
+            <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
+              Regístrate
+            </Link>
+          </p>
         </div>
-
-        {/* Login Form */}
-        <div className="bg-white rounded-2xl shadow-soft p-8">
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            {/* Email Field */}
+        
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded">
+              {error}
+            </div>
+          )}
+          
+          <div className="rounded-md shadow-sm -space-y-px">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="sr-only">
                 Correo electrónico
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  className={`input input-md w-full pl-10 ${errors.email ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
-                  placeholder="tu@email.com"
-                  {...register('email', {
-                    required: 'El correo electrónico es requerido',
-                    pattern: {
-                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: 'Correo electrónico inválido'
-                    }
-                  })}
-                />
-              </div>
-              {errors.email && (
-                <p className="mt-1 text-sm text-error-600">{errors.email.message}</p>
-              )}
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Correo electrónico"
+                value={formData.email}
+                onChange={handleChange}
+              />
             </div>
-
-            {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="sr-only">
                 Contraseña
               </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  className={`input input-md w-full pl-10 pr-10 ${errors.password ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
-                  placeholder="••••••••"
-                  {...register('password', {
-                    required: 'La contraseña es requerida',
-                    minLength: {
-                      value: 6,
-                      message: 'La contraseña debe tener al menos 6 caracteres'
-                    }
-                  })}
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  )}
-                </button>
-              </div>
-              {errors.password && (
-                <p className="mt-1 text-sm text-error-600">{errors.password.message}</p>
-              )}
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm"
+                placeholder="Contraseña"
+                value={formData.password}
+                onChange={handleChange}
+              />
             </div>
+          </div>
 
-            {/* Role Selection */}
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
-                Tipo de cuenta
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <input
+                id="remember-me"
+                name="remember-me"
+                type="checkbox"
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
+                Recordarme
               </label>
-              <select
-                id="role"
-                className={`input input-md w-full ${errors.role ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
-                {...register('role', {
-                  required: 'Selecciona el tipo de cuenta'
-                })}
-              >
-                <option value="">Selecciona tu tipo de cuenta</option>
-                <option value="client">Cliente</option>
-                <option value="driver">Chofer</option>
-                <option value="admin">Administrador</option>
-              </select>
-              {errors.role && (
-                <p className="mt-1 text-sm text-error-600">{errors.role.message}</p>
-              )}
             </div>
 
-            {/* Remember Me and Forgot Password */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
-                  Recordarme
-                </label>
-              </div>
-
-              <Link
-                to="/auth/forgot-password"
-                className="text-sm text-primary-600 hover:text-primary-500 font-medium"
-              >
+            <div className="text-sm">
+              <Link to="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
+          </div>
 
-            {/* Submit Button */}
+          <div>
             <button
               type="submit"
-              disabled={isSubmitting}
-              className="w-full btn btn-primary btn-md flex items-center justify-center space-x-2"
+              disabled={loading}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
             >
-              {isSubmitting ? (
-                <LoadingSpinner size="sm" color="white" />
-              ) : (
-                <>
-                  <LogIn className="w-4 h-4" />
-                  <span>Iniciar sesión</span>
-                </>
-              )}
+              {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
-          </form>
-
-          {/* Divider */}
-          <div className="mt-8 relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">¿No tienes cuenta?</span>
-            </div>
           </div>
 
-          {/* Register Link */}
-          <div className="mt-6 text-center">
-            <Link
-              to="/auth/register"
-              className="text-primary-600 hover:text-primary-500 font-medium"
-            >
-              Crear cuenta nueva
-            </Link>
-          </div>
-        </div>
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-gray-50 text-gray-500">O continuar con</span>
+              </div>
+            </div>
 
-        {/* Demo Accounts */}
-        {import.meta.env.DEV && (
-          <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-yellow-800 mb-2">Cuentas de prueba:</h3>
-            <div className="text-xs text-yellow-700 space-y-1">
-              <div>Cliente: cliente@test.com / 123456</div>
-              <div>Chofer: chofer@test.com / 123456</div>
-              <div>Admin: admin@test.com / 123456</div>
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <FcGoogle className="w-5 h-5 mr-2" />
+                {loading ? 'Conectando...' : 'Continuar con Google'}
+              </button>
             </div>
           </div>
-        )}
+        </form>
       </div>
     </div>
   )

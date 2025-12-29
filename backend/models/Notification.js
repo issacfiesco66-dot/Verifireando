@@ -16,10 +16,13 @@ const notificationSchema = new mongoose.Schema({
     enum: [
       'appointment_created',
       'appointment_assigned',
+      'appointment_status',
+      'new_appointment',
       'driver_enroute',
       'vehicle_picked_up',
       'verification_started',
       'verification_completed',
+      'service_completed',
       'vehicle_delivered',
       'payment_completed',
       'appointment_cancelled',

@@ -5,11 +5,22 @@ class PushNotificationService {
   constructor() {
     this.isInitialized = false
     this.subscription = null
-    this.init()
+    
+    // Only initialize in production mode
+    if (!import.meta.env.DEV) {
+      this.init()
+    }
   }
 
   // Initialize push notification service
   async init() {
+    // Skip initialization in development mode
+    if (import.meta.env.DEV) {
+      console.log('Push Notification Service: Skipping initialization in development mode')
+      this.isInitialized = true
+      return
+    }
+
     try {
       // Wait for PWA service to be ready
       await this.waitForPWAService()
@@ -155,7 +166,7 @@ class PushNotificationService {
       'appointment_created': {
         title: '¡Cita creada exitosamente!',
         body: `Tu cita para el ${appointmentData.date} a las ${appointmentData.time} ha sido confirmada.`,
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'appointment-created',
         data: {
           type: 'appointment',
@@ -172,7 +183,7 @@ class PushNotificationService {
       'driver_assigned': {
         title: 'Conductor asignado',
         body: `${appointmentData.driver.name} ha sido asignado a tu cita.`,
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'driver-assigned',
         data: {
           type: 'driver-assigned',
@@ -190,7 +201,7 @@ class PushNotificationService {
       'driver_on_way': {
         title: 'Conductor en camino',
         body: `${appointmentData.driver.name} está en camino a tu ubicación.`,
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'driver-on-way',
         data: {
           type: 'driver-on-way',
@@ -208,7 +219,7 @@ class PushNotificationService {
       'driver_arrived': {
         title: 'Conductor ha llegado',
         body: `${appointmentData.driver.name} ha llegado a tu ubicación.`,
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'driver-arrived',
         data: {
           type: 'driver-arrived',
@@ -226,7 +237,7 @@ class PushNotificationService {
       'appointment_completed': {
         title: 'Verificación completada',
         body: 'Tu verificación vehicular ha sido completada exitosamente.',
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'appointment-completed',
         data: {
           type: 'appointment-completed',
@@ -243,7 +254,7 @@ class PushNotificationService {
       'appointment_cancelled': {
         title: 'Cita cancelada',
         body: 'Tu cita de verificación ha sido cancelada.',
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'appointment-cancelled',
         data: {
           type: 'appointment-cancelled',
@@ -260,7 +271,7 @@ class PushNotificationService {
       'payment_processed': {
         title: 'Pago procesado',
         body: `Tu pago de $${appointmentData.amount} ha sido procesado exitosamente.`,
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'payment-processed',
         data: {
           type: 'payment',
@@ -277,7 +288,7 @@ class PushNotificationService {
       'reminder_24h': {
         title: 'Recordatorio de cita',
         body: `Tu cita de verificación es mañana a las ${appointmentData.time}.`,
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'reminder-24h',
         data: {
           type: 'reminder',
@@ -298,7 +309,7 @@ class PushNotificationService {
       'reminder_1h': {
         title: 'Tu cita es en 1 hora',
         body: `No olvides tu cita de verificación a las ${appointmentData.time}.`,
-        icon: '/logo192.png',
+        icon: '/icon-192.svg',
         tag: 'reminder-1h',
         data: {
           type: 'reminder',

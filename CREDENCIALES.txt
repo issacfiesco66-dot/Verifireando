@@ -1,0 +1,55 @@
+========================================
+CREDENCIALES DE ACCESO - VERIFIREANDO
+========================================
+
+CLIENTE
+-------
+Email: juan@example.com
+Password: password123
+Rol: Cliente
+
+CHOFER 1
+--------
+Email: roberto@example.com
+Password: driver123
+Rol: Chofer
+
+CHOFER 2
+--------
+Email: ana@example.com
+Password: driver123
+Rol: Chofer
+
+CHOFER 3
+--------
+Email: miguel@example.com
+Password: driver123
+Rol: Chofer
+
+ADMINISTRADOR
+-------------
+Email: admin@verifireando.com
+Password: admin123
+Rol: Admin
+
+========================================
+ACCESO A LA APLICACION
+========================================
+
+Frontend: http://localhost:5173
+Backend: http://localhost:5001/api
+
+========================================
+NOTAS IMPORTANTES
+========================================
+
+1. Al iniciar sesion, debes seleccionar el ROL correcto
+2. El simbolo @ (arroba) es necesario en todos los emails
+3. Si no ves el @, escribelo manualmente entre el nombre y el dominio
+
+Ejemplos:
+- juan@example.com = juan [ARROBA] example.com
+- roberto@example.com = roberto [ARROBA] example.com
+- admin@verifireando.com = admin [ARROBA] verifireando.com
+
+========================================

@@ -2,7 +2,7 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     
     <!-- PWA Meta Tags -->
@@ -16,19 +16,19 @@
     <meta property="og:description" content="Solicita tu verificación vehicular desde casa con conductores certificados" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://verifireando.com" />
-    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:image" content="/logo.svg" />
     
     <!-- Twitter Card Meta Tags -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Verifireando - Verificación Vehicular a Domicilio" />
     <meta name="twitter:description" content="Solicita tu verificación vehicular desde casa con conductores certificados" />
-    <meta name="twitter:image" content="/twitter-image.png" />
+    <meta name="twitter:image" content="/logo.svg" />
     
     <!-- Apple Touch Icon -->
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="/icon-192.svg" />
     
     <!-- Manifest -->
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     
     <!-- Preconnect to external domains -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -104,57 +104,61 @@
     
     <!-- Service Worker Registration -->
     <script>
+      // Force cache clear on version mismatch
+      (function() {
+        const APP_VERSION = 'v2.2.0-driver-registration-fix';
+        const storedVersion = localStorage.getItem('app-version');
+        
+        if (storedVersion !== APP_VERSION) {
+          console.log('Version mismatch detected, clearing caches...');
+          
+          // Clear service workers
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(registrations) {
+              for(let registration of registrations) {
+                registration.unregister();
+              }
+            });
+          }
+          
+          // Clear all caches
+          if ('caches' in window) {
+            caches.keys().then(function(names) {
+              for (let name of names) {
+                caches.delete(name);
+              }
+            });
+          }
+          
+          // Clear localStorage except version
+          const keysToKeep = ['app-version'];
+          Object.keys(localStorage).forEach(key => {
+            if (!keysToKeep.includes(key)) {
+              localStorage.removeItem(key);
+            }
+          });
+          
+          localStorage.setItem('app-version', APP_VERSION);
+          
+          // Force reload without cache
+          window.location.reload(true);
+        }
+      })();
+      
       // Hide loading screen when app is ready
       window.addEventListener('load', () => {
         setTimeout(() => {
           const loadingScreen = document.getElementById('loading-screen');
           if (loadingScreen) {
             loadingScreen.style.opacity = '0';
-            setTimeout(() => {
-              loadingScreen.style.display = 'none';
-            }, 300);
+            setTimeout(() => { loadingScreen.style.display = 'none'; }, 300);
           }
         }, 1000);
       });
-      
-      // Register Service Worker
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('SW registered: ', registration);
-            })
-            .catch((registrationError) => {
-              console.log('SW registration failed: ', registrationError);
-            });
-        });
-      }
-      
-      // Handle install prompt
-      let deferredPrompt;
-      window.addEventListener('beforeinstallprompt', (e) => {
-        e.preventDefault();
-        deferredPrompt = e;
-        // Show install button
-        const installButton = document.getElementById('install-button');
-        if (installButton) {
-          installButton.style.display = 'block';
-        }
-      });
-      
-      // Install app function
-      window.installApp = () => {
-        if (deferredPrompt) {
-          deferredPrompt.prompt();
-          deferredPrompt.userChoice.then((choiceResult) => {
-            if (choiceResult.outcome === 'accepted') {
-              console.log('User accepted the install prompt');
-            }
-            deferredPrompt = null;
-          });
-        }
-      };
+      // PWA install prompt is handled by app (pwaService/PWAInstallPrompt)
     </script>
+    
+    <!-- Development SW cleanup moved into app dev gating; not included in production builds -->
     
     <script type="module" src="/src/main.jsx"></script>
   </body>

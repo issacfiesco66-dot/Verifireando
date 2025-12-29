@@ -39,11 +39,11 @@ const driverSchema = new mongoose.Schema({
     required: [true, 'La fecha de vencimiento de licencia es requerida']
   },
   vehicleInfo: {
-    brand: { type: String, required: true },
-    model: { type: String, required: true },
-    year: { type: Number, required: true },
-    plates: { type: String, required: true, unique: true },
-    color: { type: String, required: true },
+    brand: { type: String, required: false },
+    model: { type: String, required: false },
+    year: { type: Number, required: false },
+    plates: { type: String, required: false, sparse: true },
+    color: { type: String, required: false },
     photos: [String]
   },
   documents: {
@@ -134,10 +134,7 @@ const driverSchema = new mongoose.Schema({
 });
 
 // Índices
-driverSchema.index({ email: 1 });
 driverSchema.index({ phone: 1 });
-driverSchema.index({ licenseNumber: 1 });
-driverSchema.index({ 'vehicleInfo.plates': 1 });
 driverSchema.index({ location: '2dsphere' });
 driverSchema.index({ isOnline: 1, isAvailable: 1 });
 

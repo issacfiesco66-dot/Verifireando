@@ -29,8 +29,8 @@ const ProtectedRoute = ({ children, allowedRoles = [], requireEmailVerification 
     return <Navigate to={redirectPath} replace />
   }
 
-  // Check email verification if required
-  if (requireEmailVerification && !user.emailVerified) {
+  // Check email verification if required (use isVerified from backend)
+  if (requireEmailVerification && !user.isVerified) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-xl shadow-soft p-8 text-center">
@@ -69,17 +69,21 @@ const ProtectedRoute = ({ children, allowedRoles = [], requireEmailVerification 
   }
 
   // Check if driver profile is complete (for driver routes)
-  if (user.role === 'driver' && allowedRoles.includes('driver')) {
-    const requiredFields = ['licenseNumber', 'vehicleInfo', 'documents']
-    const missingFields = requiredFields.filter(field => !user[field])
-    
-    if (missingFields.length > 0 && location.pathname !== '/driver/profile') {
-      return <Navigate to="/driver/profile" state={{ incomplete: true }} replace />
-    }
-  }
+  // Temporalmente desactivado para permitir acceso a todas las vistas
+  // if (user.role === 'driver' && allowedRoles.includes('driver')) {
+  //   const requiredFields = ['licenseNumber', 'vehicleInfo', 'documents']
+  //   const missingFields = requiredFields.filter(field => !user[field])
+  //   
+  //   // Solo redirigir si NO estamos ya en profile y NO hay estado de incomplete
+  //   if (missingFields.length > 0 && 
+  //       location.pathname !== '/driver/profile' && 
+  //       !location.state?.incomplete) {
+  //     return <Navigate to="/driver/profile" state={{ incomplete: true }} replace />
+  //   }
+  // }
 
-  // Check if user account is active
-  if (!user.isActive) {
+  // Check if user account is explicitly inactive
+  if (user.isActive === false) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-xl shadow-soft p-8 text-center">

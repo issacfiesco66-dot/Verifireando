@@ -1,0 +1,24 @@
+# Configuración de producción para Verifireando
+# Copia este contenido a .env.production en la carpeta frontend
+
+# URL del backend (HTTP por ahora, cambiar a HTTPS cuando configures SSL)
+VITE_API_URL=http://www.verificandoando.com.mx/api
+VITE_SOCKET_URL=http://www.verificandoando.com.mx
+
+# Firebase Configuration
+VITE_FIREBASE_API_KEY=AIzaSyCCNpyJvoWTBsqCWzk2pWCXzOSV9Zovd3Q
+VITE_FIREBASE_AUTH_DOMAIN=verificandoando-40ad5.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=verificandoando-40ad5
+VITE_FIREBASE_STORAGE_BUCKET=verificandoando-40ad5.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=579182347944
+VITE_FIREBASE_APP_ID=1:579182347944:web:13e672da1ceeea9779649d
+VITE_FIREBASE_MEASUREMENT_ID=G-HNTB1DG6GV
+
+# VAPID Key para notificaciones push
+VITE_FIREBASE_VAPID_KEY=BH9cxl63-xF73E59kj_MSk7wIj1t-ToLZFM1Ybt-RraYph6tF7X_QogGIOhMY7ve9goxrnq6_zaR71wXO1R9psE
+
+# App Configuration
+VITE_APP_NAME=Verifireando
+VITE_APP_VERSION=1.0.0
+VITE_APP_ENV=production
+VITE_ENABLE_ANALYTICS=false

@@ -27,7 +27,11 @@ const createAppointmentSchema = Joi.object({
     verification: Joi.boolean().default(true),
     additionalServices: Joi.array().items(
       Joi.object({
-        type: Joi.string().valid('wash', 'oil_change', 'tire_check', 'battery_check').required(),
+        name: Joi.string().valid(
+          'wash', 'oil_change', 'spark_plugs', 'brakes', 'air_filter', 
+          'tire_check', 'battery_check', 'brake_check', 'transmission', 
+          'cooling_system', 'electrical', 'suspension', 'exhaust', 'fuel_system'
+        ).required(),
         price: Joi.number().min(0).required()
       })
     ).default([])
@@ -91,47 +95,107 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
       }
     }
 
-    // Buscar choferes disponibles cerca de la ubicación
-    const availableDrivers = await Driver.find({
+    // Primero intentar con búsqueda geoespacial
+    try {
+      const availableDrivers = await Driver.find({
+        isOnline: true,
+        isAvailable: true,
+        isVerified: true,
+        isActive: true,
+        location: {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: [pickupCoordinates.lng, pickupCoordinates.lat]
+            },
+            $maxDistance: 20000 // 20km máximo
+          }
+        }
+      }).limit(5);
+
+      if (availableDrivers.length > 0) {
+        return availableDrivers[0];
+      }
+    } catch (geoError) {
+      console.warn('Búsqueda geoespacial fallida, intentando sin filtro de ubicación:', geoError.message);
+    }
+
+    // Si la búsqueda geoespacial falla, buscar cualquier driver disponible
+    const anyAvailableDrivers = await Driver.find({
       isOnline: true,
       isAvailable: true,
       isVerified: true,
-      isActive: true,
-      location: {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [pickupCoordinates.lng, pickupCoordinates.lat]
-          },
-          $maxDistance: 20000 // 20km máximo
-        }
-      }
+      isActive: true
     }).limit(5);
 
-    if (availableDrivers.length === 0) {
+    if (anyAvailableDrivers.length === 0) {
+      console.log('No hay drivers disponibles');
       return null;
     }
 
-    // Seleccionar el chofer con mejor rating y más cercano
-    const driversWithDistance = availableDrivers.map(driver => ({
-      driver,
-      distance: driver.distanceTo(pickupCoordinates.lat, pickupCoordinates.lng)
-    }));
-
-    driversWithDistance.sort((a, b) => {
-      // Priorizar por rating, luego por distancia
-      if (Math.abs(a.driver.rating - b.driver.rating) > 0.5) {
-        return b.driver.rating - a.driver.rating;
-      }
-      return a.distance - b.distance;
-    });
-
-    return driversWithDistance[0].driver;
+    // Seleccionar el primer driver disponible
+    console.log('Driver asignado sin filtro geoespacial:', anyAvailableDrivers[0].name);
+    return anyAvailableDrivers[0];
   } catch (error) {
-    logger.error('Error buscando chofer disponible:', error);
+    console.error('Error finding available driver:', error);
     return null;
   }
 }
+
+// Obtener mis citas (ruta específica para usuarios)
+router.get('/my-appointments', auth, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+
+    if (req.userRole === 'client') {
+      filter.client = req.userId;
+    } else if (req.userRole === 'driver') {
+      filter.driver = req.userId;
+    } else if (req.userRole === 'admin') {
+      if (req.query.client) filter.client = req.query.client;
+      if (req.query.driver) filter.driver = req.query.driver;
+    }
+
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+
+    if (req.query.date) {
+      const date = new Date(req.query.date);
+      const nextDay = new Date(date);
+      nextDay.setDate(date.getDate() + 1);
+      filter.scheduledDate = { $gte: date, $lt: nextDay };
+    }
+
+    const appointments = await Appointment.find(filter)
+      .populate('client', 'name email phone')
+      .populate('driver', 'name phone vehicleInfo rating')
+      .populate('car', 'plates brand model color')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Appointment.countDocuments(filter);
+
+    res.json({
+      appointments,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error obteniendo mis citas:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
 
 // Obtener todas las citas
 router.get('/', auth, async (req, res) => {
@@ -139,58 +203,38 @@ router.get('/', auth, async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    
-    // Usar datos mock en lugar de MongoDB
-    let filteredAppointments = [...mockAppointments];
-    
-    // Filtrar por rol
+
+    const filter = {};
+
     if (req.userRole === 'client') {
-      filteredAppointments = filteredAppointments.filter(appointment => 
-        appointment.client === req.userId
-      );
+      filter.client = req.userId;
     } else if (req.userRole === 'driver') {
-      filteredAppointments = filteredAppointments.filter(appointment => 
-        appointment.driver === req.userId
-      );
+      filter.driver = req.userId;
+    } else if (req.userRole === 'admin') {
+      if (req.query.client) filter.client = req.query.client;
+      if (req.query.driver) filter.driver = req.query.driver;
     }
-    // Admin ve todas las citas
-    
-    // Filtros adicionales
+
     if (req.query.status) {
-      filteredAppointments = filteredAppointments.filter(appointment => 
-        appointment.status === req.query.status
-      );
+      filter.status = req.query.status;
     }
-    
+
     if (req.query.date) {
       const date = new Date(req.query.date);
       const nextDay = new Date(date);
       nextDay.setDate(date.getDate() + 1);
-      
-      filteredAppointments = filteredAppointments.filter(appointment => {
-        const appointmentDate = new Date(appointment.scheduledDate);
-        return appointmentDate >= date && appointmentDate < nextDay;
-      });
-    }
-    
-    if (req.query.driver && req.userRole === 'admin') {
-      filteredAppointments = filteredAppointments.filter(appointment => 
-        appointment.driver === req.query.driver
-      );
-    }
-    
-    if (req.query.client && req.userRole === 'admin') {
-      filteredAppointments = filteredAppointments.filter(appointment => 
-        appointment.client === req.query.client
-      );
+      filter.scheduledDate = { $gte: date, $lt: nextDay };
     }
 
-    // Ordenar por fecha de creación (más recientes primero)
-    filteredAppointments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    
-    // Aplicar paginación
-    const total = filteredAppointments.length;
-    const appointments = filteredAppointments.slice(skip, skip + limit);
+    const appointments = await Appointment.find(filter)
+      .populate('client', 'name email phone')
+      .populate('driver', 'name phone vehicleInfo rating')
+      .populate('car', 'plates brand model color')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Appointment.countDocuments(filter);
 
     res.json({
       appointments,
@@ -247,6 +291,10 @@ router.post('/', auth, async (req, res) => {
   try {
     const { error, value } = createAppointmentSchema.validate(req.body);
     if (error) {
+      logger.error('Error de validación en cita:', { 
+        errors: error.details.map(d => ({ field: d.path.join('.'), message: d.message })),
+        body: req.body 
+      });
       return res.status(400).json({ 
         message: 'Datos inválidos', 
         errors: error.details.map(d => d.message) 
@@ -367,11 +415,7 @@ router.post('/', auth, async (req, res) => {
       { path: 'car', select: 'plates brand model color' }
     ]);
 
-    // Emitir evento de nueva cita
-    req.io.emit('new-appointment', {
-      appointment: appointment.toJSON(),
-      timestamp: new Date()
-    });
+    // Socket.IO removed - real-time updates disabled
 
     logger.info(`Cita creada: ${appointment.appointmentNumber} por ${req.user.email}`);
 
@@ -492,14 +536,7 @@ router.put('/:id/status', auth, async (req, res) => {
       }
     });
 
-    // Emitir actualización en tiempo real
-    req.io.to(appointment._id.toString()).emit('status-update', {
-      appointmentId: appointment._id,
-      status: value.status,
-      notes: value.notes,
-      timestamp: new Date(),
-      ...(value.location && { driverLocation: value.location })
-    });
+    // Socket.IO removed - real-time updates disabled
 
     logger.info(`Estado de cita actualizado: ${appointment.appointmentNumber} a ${value.status} por ${req.user.email}`);
 
@@ -584,6 +621,8 @@ router.put('/:id/assign-driver', auth, authorize('admin'), async (req, res) => {
         priority: 'high'
       }
     });
+
+    // Socket.IO removed - real-time updates disabled
 
     logger.info(`Chofer asignado manualmente: ${driver.email} para cita ${appointment.appointmentNumber} por ${req.user.email}`);
 
@@ -693,6 +732,8 @@ router.put('/:id/cancel', auth, async (req, res) => {
 
     await appointment.save();
 
+    // Socket.IO removed - real-time updates disabled
+
     logger.info(`Cita cancelada: ${appointment.appointmentNumber} por ${req.user.email}`);
 
     res.json({
@@ -796,19 +837,9 @@ router.get('/driver/available', auth, async (req, res) => {
       return res.json({ appointments: [] });
     }
 
-    // Buscar citas pendientes cerca del chofer
-    const radius = 20000; // 20km
+    // Temporalmente simplificado: obtener todas las citas pendientes sin filtro geoespacial
     const appointments = await Appointment.find({
-      status: 'pending',
-      'pickupAddress.coordinates': {
-        $near: {
-          $geometry: {
-            type: 'Point',
-            coordinates: [driver.location.coordinates[0], driver.location.coordinates[1]]
-          },
-          $maxDistance: radius
-        }
-      }
+      status: 'pending'
     })
     .populate('client', 'name phone')
     .populate('car', 'plates brand model color')
@@ -817,11 +848,8 @@ router.get('/driver/available', auth, async (req, res) => {
 
     // Calcular distancia para cada cita
     const appointmentsWithDistance = appointments.map(appointment => {
-      const distance = driver.distanceTo(
-        appointment.pickupAddress.coordinates.lat,
-        appointment.pickupAddress.coordinates.lng
-      );
-      
+      const [lng, lat] = appointment.pickupAddress.coordinates.coordinates;
+      const distance = driver.distanceTo(lat, lng);
       return {
         ...appointment.toJSON(),
         distance: Math.round(distance * 100) / 100
@@ -898,6 +926,8 @@ router.put('/:id/accept', auth, async (req, res) => {
       }
     });
 
+    // Socket.IO removed - real-time updates disabled
+
     logger.info(`Cita aceptada: ${appointment.appointmentNumber} por chofer ${driver.email}`);
 
     res.json({
@@ -911,6 +941,117 @@ router.put('/:id/accept', auth, async (req, res) => {
 
   } catch (error) {
     logger.error('Error aceptando cita:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Marcar servicio extra como completado
+router.put('/:id/services/:serviceName/complete', auth, async (req, res) => {
+  try {
+    const { id, serviceName } = req.params;
+
+    if (req.userRole !== 'driver') {
+      return res.status(403).json({ 
+        message: 'Solo los choferes pueden marcar servicios como completados' 
+      });
+    }
+
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({ message: 'Cita no encontrada' });
+    }
+
+    if (appointment.driver.toString() !== req.userId) {
+      return res.status(403).json({ message: 'No tienes permiso sobre esta cita' });
+    }
+
+    const serviceIndex = appointment.services.additionalServices.findIndex(
+      s => s.name === serviceName
+    );
+
+    if (serviceIndex === -1) {
+      return res.status(404).json({ message: 'Servicio no encontrado en esta cita' });
+    }
+
+    appointment.services.additionalServices[serviceIndex].completed = true;
+    appointment.services.additionalServices[serviceIndex].completedAt = new Date();
+
+    await appointment.save();
+
+    // Notificar al cliente
+    await Notification.create({
+      recipient: appointment.client,
+      recipientModel: 'User',
+      type: 'service_completed',
+      channel: 'push',
+      title: 'Servicio Completado',
+      message: `El servicio de ${serviceName} ha sido completado`,
+      data: {
+        appointmentId: appointment._id,
+        serviceName,
+        completedAt: new Date()
+      }
+    });
+
+    res.json({
+      message: 'Servicio marcado como completado',
+      service: appointment.services.additionalServices[serviceIndex]
+    });
+
+  } catch (error) {
+    logger.error('Error completando servicio:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Agregar evidencia a un servicio
+router.post('/:id/services/:serviceName/evidence', auth, async (req, res) => {
+  try {
+    const { id, serviceName } = req.params;
+    const { url, description } = req.body;
+
+    if (!url) {
+      return res.status(400).json({ message: 'URL de evidencia requerida' });
+    }
+
+    if (req.userRole !== 'driver') {
+      return res.status(403).json({ 
+        message: 'Solo los choferes pueden agregar evidencia' 
+      });
+    }
+
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({ message: 'Cita no encontrada' });
+    }
+
+    if (appointment.driver.toString() !== req.userId) {
+      return res.status(403).json({ message: 'No tienes permiso sobre esta cita' });
+    }
+
+    const serviceIndex = appointment.services.additionalServices.findIndex(
+      s => s.name === serviceName
+    );
+
+    if (serviceIndex === -1) {
+      return res.status(404).json({ message: 'Servicio no encontrado en esta cita' });
+    }
+
+    appointment.services.additionalServices[serviceIndex].evidence.push({
+      url: url,
+      description: description || 'Evidencia fotográfica',
+      uploadedAt: new Date()
+    });
+
+    await appointment.save();
+
+    res.json({
+      message: 'Evidencia agregada exitosamente',
+      evidence: appointment.services.additionalServices[serviceIndex].evidence
+    });
+
+  } catch (error) {
+    logger.error('Error agregando evidencia:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });

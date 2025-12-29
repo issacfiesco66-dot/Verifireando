@@ -1,0 +1,119 @@
+#!/bin/bash
+# ========================================
+# SCRIPT DE CONFIGURACIÓN AUTOMÁTICA EC2
+# ========================================
+# Copia TODO este script y ejecútalo en tu servidor EC2
+
+# URI de MongoDB Atlas (YA CONFIGURADA)
+MONGODB_URI="mongodb+srv://prueba:Chicharito26@verificandoando.iz5eoyu.mongodb.net/verifireando?retryWrites=true&w=majority&appName=Verificandoando"
+
+# Ruta del proyecto (ajusta si es diferente)
+PROJECT_PATH="/home/ubuntu/verifireando/backend"
+
+echo "🚀 CONFIGURANDO SERVIDOR EC2"
+echo "============================"
+echo ""
+
+# Verificar que existe el proyecto
+if [ ! -d "$PROJECT_PATH" ]; then
+    echo "❌ Error: No se encuentra el proyecto en $PROJECT_PATH"
+    echo "Ajusta la variable PROJECT_PATH en este script"
+    exit 1
+fi
+
+cd $PROJECT_PATH
+
+# Backup del .env actual
+echo "1️⃣  Haciendo backup..."
+if [ -f .env ]; then
+    cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
+    echo "   ✅ Backup creado"
+fi
+
+# Crear nuevo .env
+echo "2️⃣  Actualizando variables de entorno..."
+cat > .env << 'EOF'
+# Base de Datos
+MONGODB_URI=mongodb+srv://prueba:Chicharito26@verificandoando.iz5eoyu.mongodb.net/verifireando?retryWrites=true&w=majority&appName=Verificandoando
+
+# Entorno
+NODE_ENV=production
+PORT=5000
+
+# Seguridad (generados automáticamente)
+JWT_SECRET=YzM4NjFhZTRiOGY3ZDk2YzJlMzQ1YThhNzFiOWQyZjM4ZTRhNWY2YjdjOGQ5ZTFhMmI0YzNkNWU2ZjdhOGI5MA==
+JWT_REFRESH_SECRET=ZGY4OWE3YjZjNWQzZTRmMmE4YjFjOWU3ZDZmNGEzYjJlOGM1ZDdhOWY2YjRlMzJhMWM4ZDliN2U2ZjVhNGMzOA==
+
+# Frontend
+FRONTEND_URL=https://www.verificandoando.com.mx
+ALLOWED_ORIGINS=https://www.verificandoando.com.mx,https://verificandoando.com.mx
+
+# Configuración
+SERVE_FRONTEND=false
+EOF
+
+echo "   ✅ Variables actualizadas"
+
+# Instalar dependencias
+echo "3️⃣  Instalando dependencias..."
+npm install --production --silent
+echo "   ✅ Dependencias instaladas"
+
+# Reiniciar aplicación
+echo "4️⃣  Reiniciando aplicación..."
+
+if command -v pm2 &> /dev/null; then
+    pm2 restart verifireando 2>/dev/null || pm2 start app.js --name verifireando
+    echo "   ✅ Reiniciado con PM2"
+elif systemctl list-units --type=service 2>/dev/null | grep -q verifireando; then
+    sudo systemctl restart verifireando
+    echo "   ✅ Reiniciado con systemd"
+else
+    echo "   ⚠️  Reinicia manualmente: npm start"
+fi
+
+# Esperar a que inicie
+echo "5️⃣  Esperando a que inicie..."
+sleep 5
+
+# Verificar
+echo "6️⃣  Verificando..."
+HEALTH=$(curl -s http://localhost:5000/health 2>/dev/null)
+if [ $? -eq 0 ]; then
+    echo "   ✅ Health check: OK"
+else
+    echo "   ⚠️  Health check: No responde"
+fi
+
+DB_CHECK=$(curl -s http://localhost:5000/api/diagnostics 2>/dev/null | grep -o '"connected":[^,]*' | cut -d':' -f2)
+if [ "$DB_CHECK" == "true" ]; then
+    echo "   ✅ MongoDB: Conectado"
+else
+    echo "   ⚠️  MongoDB: Verificar conexión"
+fi
+
+# Mostrar logs recientes
+echo ""
+echo "7️⃣  Logs recientes:"
+echo "===================="
+if command -v pm2 &> /dev/null; then
+    pm2 logs verifireando --lines 15 --nostream
+elif systemctl list-units --type=service 2>/dev/null | grep -q verifireando; then
+    sudo journalctl -u verifireando -n 15 --no-pager
+fi
+
+echo ""
+echo "✅ CONFIGURACIÓN COMPLETADA"
+echo "=========================="
+echo ""
+echo "📊 Verifica en tu navegador:"
+echo "   https://www.verificandoando.com.mx/api/diagnostics"
+echo "   https://www.verificandoando.com.mx/api/services"
+echo ""
+echo "📝 Ver logs en tiempo real:"
+if command -v pm2 &> /dev/null; then
+    echo "   pm2 logs verifireando"
+elif systemctl list-units --type=service 2>/dev/null | grep -q verifireando; then
+    echo "   sudo journalctl -u verifireando -f"
+fi
+echo ""

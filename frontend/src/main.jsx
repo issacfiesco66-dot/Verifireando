@@ -7,12 +7,19 @@ import './index.css'
 
 // Import contexts
 import { AuthProvider } from './contexts/AuthContext'
-import { SocketProvider } from './contexts/SocketContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { LocationProvider } from './contexts/LocationContext'
 
 // Error boundary
 import ErrorBoundary from './components/common/ErrorBoundary'
+
+// Cache clearing utility
+import { checkAndClearCache } from './utils/clearCache'
+
+// Check and clear cache if version mismatch
+if (!import.meta.env.DEV) {
+  checkAndClearCache()
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -24,10 +31,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         }}
       >
         <AuthProvider>
-          <SocketProvider>
-            <NotificationProvider>
-              <LocationProvider>
-                <App />
+          <NotificationProvider>
+            <LocationProvider>
+              <App />
                 <Toaster
                   position="top-right"
                   toastOptions={{
@@ -52,9 +58,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     },
                   }}
                 />
-              </LocationProvider>
-            </NotificationProvider>
-          </SocketProvider>
+            </LocationProvider>
+          </NotificationProvider>
         </AuthProvider>
       </BrowserRouter>
     </ErrorBoundary>

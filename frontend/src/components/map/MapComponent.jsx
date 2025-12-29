@@ -7,7 +7,10 @@ import LoadingSpinner from '../common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 // Set Mapbox access token
-mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
+const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN
+if (MAPBOX_TOKEN) {
+  mapboxgl.accessToken = MAPBOX_TOKEN
+}
 
 const MapComponent = ({
   center = [-99.1332, 19.4326], // Mexico City default
@@ -26,6 +29,19 @@ const MapComponent = ({
   interactive = true,
   showRouteControls = false
 }) => {
+  // If token is missing, render a friendly fallback instead of initializing Mapbox
+  const isTokenMissing = !MAPBOX_TOKEN
+  if (isTokenMissing) {
+    return (
+      <div className={`flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg ${className}`} style={{ height }}>
+        <div className="text-center p-4">
+          <p className="text-gray-700 font-semibold">Mapa deshabilitado</p>
+          <p className="text-sm text-gray-500 mt-1">Falta configurar la variable <code>VITE_MAPBOX_ACCESS_TOKEN</code>.</p>
+        </div>
+      </div>
+    )
+  }
+
   const mapContainer = useRef(null)
   const map = useRef(null)
   const userLocationMarker = useRef(null)
@@ -210,9 +226,13 @@ const MapComponent = ({
   useEffect(() => {
     if (!mapLoaded || !showRoute || !routeStart || !routeEnd) {
       // Remove existing route if any
-      if (map.current.getLayer(routeLayerId)) {
-        map.current.removeLayer(routeLayerId)
-        map.current.removeSource(routeLayerId)
+      try {
+        if (map.current && map.current.getLayer && map.current.getLayer(routeLayerId)) {
+          map.current.removeLayer(routeLayerId)
+          map.current.removeSource(routeLayerId)
+        }
+      } catch (error) {
+        // Ignore errors when style is not loaded yet
       }
       return
     }
@@ -221,7 +241,7 @@ const MapComponent = ({
   }, [mapLoaded, showRoute, routeStart, routeEnd])
 
   const calculateRoute = async () => {
-    if (!routeStart || !routeEnd) return
+    if (!routeStart || !routeEnd || !map.current) return
 
     setRouteLoading(true)
     try {
@@ -229,9 +249,13 @@ const MapComponent = ({
       setRouteData(route)
 
       // Remove existing route
-      if (map.current.getLayer(routeLayerId)) {
-        map.current.removeLayer(routeLayerId)
-        map.current.removeSource(routeLayerId)
+      try {
+        if (map.current.getLayer && map.current.getLayer(routeLayerId)) {
+          map.current.removeLayer(routeLayerId)
+          map.current.removeSource(routeLayerId)
+        }
+      } catch (error) {
+        // Ignore errors when style is not loaded yet
       }
 
       // Add route to map

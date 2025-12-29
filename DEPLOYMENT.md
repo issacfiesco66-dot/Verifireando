@@ -297,7 +297,83 @@ https://tu-app.netlify.app
 https://tu-app.netlify.app/manifest.json
 ```
 
+## 🌍 Dominio y API (desde cero)
+
+Para evitar errores de DNS y 404 en la API y en la PWA, configura el subdominio de la API y las variables de entorno del frontend siguiendo estos pasos:
+
+### 1) Backend y DNS
+- Despliega el backend (Ámbar Hosting/Render/Railway) y obtén su URL pública (ej. `https://tu-backend-host.com`).
+- Crea el subdominio `api.verifireando.com` en tu DNS:
+  - CNAME `api` → `tu-backend-host.com` (recomendado) o A record a la IP si es servidor propio.
+  - Habilita SSL para `api.verifireando.com`.
+- Verifica salud: `https://api.verifireando.com/api/health` debe responder 200.
+
+### 2) CORS en el backend
+- Ajusta `FRONTEND_URL` y `ALLOWED_ORIGINS` para incluir tu dominio del frontend:
+  - `FRONTEND_URL=https://www.verifireando.com` (o el dominio en Vercel/Netlify)
+  - `ALLOWED_ORIGINS=https://www.verifireando.com,https://verifireando.vercel.app`
+
+### 3) Frontend (Vercel/Netlify)
+- Configura variables de entorno en el sitio del frontend:
+  - `VITE_API_URL=https://api.verifireando.com/api`
+  - Opcional WebSocket: `VITE_SOCKET_URL=https://api.verifireando.com`
+- No uses rewrites para `/api` en el frontend. En `frontend/vercel.json` deja únicamente el fallback SPA:
+  ```json
+  {
+    "rewrites": [
+      { "source": "/(.*)", "destination": "/" }
+    ]
+  }
+  ```
+- Asegúrate de que los headers de `sw.js` y `registerSW.js` sean `Cache-Control: no-cache` (ya configurado).
+
+### 4) PWA y limpieza de caché
+- Manifiesto e iconos: usa `icon-192.svg` y `icon-512.svg` en `frontend/public/` y no referencies `pwa-192x192.png`.
+- Tras cada despliegue, limpia caché del Service Worker si persisten iconos antiguos:
+  - Chrome DevTools → Application → Service Workers → Unregister
+  - Hard reload (Ctrl+Shift+R)
+
+### 5) Verificación funcional
+- Registro/Login: confirman que las llamadas a `VITE_API_URL` responden 200.
+- Página `/auth/verify-email`: carga sin 404 y procesa el token.
+- Manifest e iconos: `https://www.verifireando.com/manifest.webmanifest` responde 200 y lista SVGs.
+
+---
+
 ## 🔒 7. Seguridad
+
+## 🟣 Render (deploy backend rápido)
+
+Si usas Render para el backend, estos son los pasos mínimos:
+
+- Requisitos en el repo:
+  - En `package.json` raíz: `"start": "node backend/server.js"` (listo) y `"engines": { "node": "20.x" }` (listo).
+  - Archivo `render.yaml` incluido, con blueprint del servicio.
+
+- En Render (Dashboard):
+  - Crea un nuevo servicio Web desde el repo.
+  - Build Command: `npm install`
+  - Start Command: `npm start`
+  - Health Check Path: `/api/health`
+  - Región: cercana a tu base de datos (ej. Oregon).
+
+- Variables de entorno mínimas (Render → Environment):
+  - `NODE_ENV=production`
+  - `MONGO_URI=YOUR_ATLAS_URI`
+  - `FRONTEND_URL=https://www.verifireando.com` (o tu dominio)
+  - `ALLOWED_ORIGINS=https://www.verifireando.com,https://verifireando.vercel.app`
+  - `JWT_SECRET` y `JWT_REFRESH_SECRET` (valores seguros)
+  - Opcionales según integraciones: `FIREBASE_PROJECT_ID`, `FIREBASE_PRIVATE_KEY`, `FIREBASE_CLIENT_EMAIL`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `MERCADOPAGO_ACCESS_TOKEN`.
+
+- Deploy:
+  - Haz commit y push al repositorio.
+  - En el servicio de Render: “Manual Deploy → Deploy latest commit”.
+  - Verifica `https://<tu-servicio>.onrender.com/api/health` devuelve 200.
+
+Troubleshooting común en Render:
+- 502 Bad Gateway: normalmente por `MONGO_URI` ausente o puerto incorrecto. Render inyecta `PORT`; el backend ya usa `process.env.PORT`.
+- CORS bloquea requests: ajusta `FRONTEND_URL` y `ALLOWED_ORIGINS` correctamente.
+- Variables de Firebase/Stripe: si están vacías y las rutas las requieren, podrían causar errores en inicialización; usa mocks o deshabilita temporalmente las integraciones.
 
 ### Variables de Entorno Seguras
 

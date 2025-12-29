@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { Eye, EyeOff, Mail, Lock, User, Phone, UserPlus } from 'lucide-react'
+import { Eye, EyeOff, Mail, Lock, User, Phone, UserPlus, Car, CreditCard, Calendar } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 
+// Version: 2025-12-28-02:35 - Registro simplificado de conductores (solo licencia)
 const Register = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -20,6 +21,10 @@ const Register = () => {
   } = useForm()
 
   const password = watch('password')
+  const selectedRole = watch('role')
+
+  // Log para debug - versión simplificada de registro
+  console.log('Register v2.0 - Conductor solo requiere licencia')
 
   // Redirect if already logged in
   useEffect(() => {
@@ -36,18 +41,28 @@ const Register = () => {
 
   const onSubmit = async (data) => {
     try {
-      await registerUser({
+      setJustRegistered(true) // Set BEFORE register to prevent useEffect redirect
+      
+      const registrationData = {
         name: data.name,
         email: data.email,
         phone: data.phone,
         password: data.password,
         role: data.role
-      })
+      }
+
+      // Add driver-specific fields if role is driver (solo licencia)
+      if (data.role === 'driver') {
+        registrationData.licenseNumber = data.licenseNumber
+        registrationData.licenseExpiry = data.licenseExpiry
+      }
       
-      // Redirect to email verification or dashboard
-      setJustRegistered(true)
-      navigate('/auth/verify-email', { replace: true })
+      await registerUser(registrationData)
+      
+      // Redirect to email verification
+      navigate('/auth/verify-email', { replace: true, state: { email: data.email } })
     } catch (error) {
+      setJustRegistered(false) // Reset on error
       // Error is handled by AuthContext
     }
   }
@@ -247,6 +262,58 @@ const Register = () => {
                 <p className="mt-1 text-sm text-error-600">{errors.password.message}</p>
               )}
             </div>
+
+            {/* Driver-specific fields */}
+            {selectedRole === 'driver' && (
+              <>
+                {/* License Number */}
+                <div>
+                  <label htmlFor="licenseNumber" className="block text-sm font-medium text-gray-700 mb-2">
+                    Número de Licencia
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <CreditCard className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="licenseNumber"
+                      type="text"
+                      className={`input input-md w-full pl-10 ${errors.licenseNumber ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
+                      placeholder="ABC123456"
+                      {...register('licenseNumber', {
+                        required: selectedRole === 'driver' ? 'El número de licencia es requerido' : false
+                      })}
+                    />
+                  </div>
+                  {errors.licenseNumber && (
+                    <p className="mt-1 text-sm text-error-600">{errors.licenseNumber.message}</p>
+                  )}
+                </div>
+
+                {/* License Expiry */}
+                <div>
+                  <label htmlFor="licenseExpiry" className="block text-sm font-medium text-gray-700 mb-2">
+                    Fecha de Vencimiento de Licencia
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                      <Calendar className="h-5 w-5 text-gray-400" />
+                    </div>
+                    <input
+                      id="licenseExpiry"
+                      type="date"
+                      className={`input input-md w-full pl-10 ${errors.licenseExpiry ? 'border-error-500 focus:border-error-500 focus:ring-error-500' : ''}`}
+                      {...register('licenseExpiry', {
+                        required: selectedRole === 'driver' ? 'La fecha de vencimiento es requerida' : false
+                      })}
+                    />
+                  </div>
+                  {errors.licenseExpiry && (
+                    <p className="mt-1 text-sm text-error-600">{errors.licenseExpiry.message}</p>
+                  )}
+                </div>
+              </>
+            )}
 
             {/* Confirm Password Field */}
             <div>

@@ -20,9 +20,13 @@ const { initializeFirebase } = require('./config/firebase');
 
 const app = express();
 const server = createServer(app);
+const defaultOrigins = ["http://localhost:3000", "http://localhost:5173"];
+const envOriginsRaw = process.env.FRONTEND_URL || process.env.CORS_ORIGIN;
+const allowedOrigins = envOriginsRaw ? envOriginsRaw.split(',').map(s => s.trim()) : defaultOrigins;
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: allowedOrigins,
     methods: ["GET", "POST"]
   }
 });
@@ -30,14 +34,18 @@ const io = new Server(server, {
 // Middleware de seguridad
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error('CORS not allowed for origin: ' + origin));
+  },
   credentials: true
 }));
 
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100 // límite de 100 requests por ventana por IP
+  max: process.env.NODE_ENV === 'development' ? 1000 : 100 // 1000 en desarrollo, 100 en producción
 });
 app.use(limiter);
 
@@ -45,17 +53,26 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Conexión a MongoDB
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/verifireando', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+// Conexión a MongoDB Atlas - SOLO ATLAS, sin fallback a localhost
+const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+
+if (!mongoUri) {
+  console.error('❌ ERROR: MONGODB_URI no está configurada');
+  console.error('Configura la variable de entorno con tu connection string de Atlas');
+  process.exit(1);
+}
+
+mongoose.connect(mongoUri, {
+  serverSelectionTimeoutMS: 10000,
 })
 .then(() => {
-  logger.info('Conectado a MongoDB');
+  logger.info('✅ Conectado a MongoDB Atlas');
+  console.log('✅ Conectado a MongoDB Atlas');
 })
 .catch((error) => {
-  logger.error('Error conectando a MongoDB:', error);
-  process.exit(1);
+  logger.error('❌ Error conectando a MongoDB Atlas:', error);
+  console.error('❌ Error conectando a MongoDB Atlas:', error.message);
+  process.exit(1); // Forzar salida si no hay conexión a Atlas
 });
 
 // Inicializar Firebase
@@ -105,6 +122,20 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
+});
+
+// Compatibilidad con Render: healthz
+app.get('/healthz', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+// Raíz informativa para evitar 404 en /
+app.get('/', (req, res) => {
+  res.status(200).json({ message: 'Verifireando Backend', status: 'OK' });
 });
 
 // Manejo de errores global

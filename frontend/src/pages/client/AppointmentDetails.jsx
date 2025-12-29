@@ -18,10 +18,10 @@ import {
   AlertCircle,
   XCircle,
   Navigation,
-  Edit
+  Edit,
+  Send
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import MapComponent from '../../components/map/MapComponent'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -30,14 +30,15 @@ import toast from 'react-hot-toast'
 const AppointmentDetails = () => {
   const { id } = useParams()
   const { user } = useAuth()
-  const { socket } = useSocket()
   const navigate = useNavigate()
   
   const [appointment, setAppointment] = useState(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
   const [showCancelModal, setShowCancelModal] = useState(false)
-  const [cancelReason, setCancelReason] = useState('')
+  const [showMessageModal, setShowMessageModal] = useState(false)
+  const [message, setMessage] = useState('')
+  const [sendingMessage, setSendingMessage] = useState(false)
   const [rating, setRating] = useState(0)
   const [review, setReview] = useState('')
   const [submittingReview, setSubmittingReview] = useState(false)
@@ -117,22 +118,121 @@ const AppointmentDetails = () => {
   const handleSubmitReview = async () => {
     try {
       setSubmittingReview(true)
+      
       await appointmentService.rateAppointment(id, {
         rating,
-        review
+        comment: review
       })
       
-      setAppointment(prev => ({
-        ...prev,
-        rating: { rating, review, createdAt: new Date() }
-      }))
+      toast.success('Calificación enviada correctamente')
+      setReview('')
+      setRating(0)
       
-      toast.success('Reseña enviada exitosamente')
+      // Refresh appointment data
+      fetchAppointment()
     } catch (error) {
-      toast.error('Error al enviar la reseña')
+      toast.error('Error al enviar calificación')
     } finally {
       setSubmittingReview(false)
     }
+  }
+
+  const handleSendMessage = async () => {
+    if (!message.trim()) {
+      toast.error('Por favor escribe un mensaje')
+      return
+    }
+
+    try {
+      setSendingMessage(true)
+      
+      // Enviar mensaje a través del socket o API
+      if (socket && appointment.driver) {
+        socket.emit('send-message', {
+          recipientId: appointment.driver._id,
+          appointmentId: appointment._id,
+          message: message.trim(),
+          senderType: 'client'
+        })
+      }
+      
+      toast.success('Mensaje enviado correctamente')
+      setMessage('')
+      setShowMessageModal(false)
+    } catch (error) {
+      toast.error('Error al enviar mensaje')
+    } finally {
+      setSendingMessage(false)
+    }
+  }
+
+  const handleDownloadCertificate = async () => {
+    try {
+      // Simular descarga del certificado
+      const certificateData = {
+        appointmentNumber: appointment.appointmentNumber,
+        clientName: user.name,
+        carInfo: `${appointment.car.brand} ${appointment.car.model} - ${appointment.car.plates}`,
+        verificationDate: appointment.completedAt || appointment.updatedAt,
+        services: appointment.services.map(s => s.name).join(', '),
+        driverName: appointment.driver?.name || 'N/A'
+      }
+      
+      // Crear un PDF simple (simulado)
+      const certificateText = `
+CERTIFICADO DE VERIFICACIÓN VEHICULAR
+
+Número de Cita: ${certificateData.appointmentNumber}
+Cliente: ${certificateData.clientName}
+Vehículo: ${certificateData.carInfo}
+Fecha de Verificación: ${new Date(certificateData.verificationDate).toLocaleDateString('es-MX')}
+Servicios Realizados: ${certificateData.services}
+Verificado por: ${certificateData.driverName}
+
+Este certificado confirma que el vehículo ha pasado
+la verificación técnica correspondiente.
+
+Emitido el: ${new Date().toLocaleDateString('es-MX')}
+      `.trim()
+      
+      // Crear y descargar el archivo
+      const blob = new Blob([certificateText], { type: 'text/plain' })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `certificado_${appointment.appointmentNumber}.txt`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      
+      toast.success('Certificado descargado correctamente')
+    } catch (error) {
+      toast.error('Error al descargar certificado')
+    }
+  }
+
+  const handleContactSupport = () => {
+    // Crear mensaje predefinido para soporte
+    const supportMessage = `
+Hola, necesito ayuda con la cita #${appointment?.appointmentNumber}
+
+Detalles de la cita:
+- Cliente: ${user?.name}
+- Vehículo: ${appointment?.car?.brand} ${appointment?.car?.model} - ${appointment?.car?.plates}
+- Estado: ${appointment?.status}
+- Fecha: ${appointment?.scheduledDate ? new Date(appointment.scheduledDate).toLocaleDateString('es-MX') : 'N/A'}
+
+Mensaje: [Describe tu problema aquí]
+    `.trim()
+    
+    // Abrir cliente de correo con mensaje predefinido
+    const subject = encodeURIComponent(`Ayuda con cita #${appointment?.appointmentNumber}`)
+    const body = encodeURIComponent(supportMessage)
+    const mailtoUrl = `mailto:soporte@verifireando.com?subject=${subject}&body=${body}`
+    
+    window.open(mailtoUrl, '_blank')
+    toast.success('Abriendo cliente de correo para contactar soporte')
   }
 
   const getStatusIcon = (status) => {
@@ -586,7 +686,10 @@ const AppointmentDetails = () => {
                 </div>
                 
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                  <button className="btn btn-secondary btn-sm w-full flex items-center justify-center space-x-2">
+                  <button 
+                    onClick={() => setShowMessageModal(true)}
+                    className="btn btn-secondary btn-sm w-full flex items-center justify-center space-x-2"
+                  >
                     <MessageCircle className="w-4 h-4" />
                     <span>Enviar mensaje</span>
                   </button>
@@ -610,7 +713,10 @@ const AppointmentDetails = () => {
               
               <div className="space-y-3">
                 {appointment.certificate && (
-                  <button className="btn btn-secondary btn-sm w-full flex items-center justify-center space-x-2">
+                  <button 
+                    onClick={handleDownloadCertificate}
+                    className="btn btn-secondary btn-sm w-full flex items-center justify-center space-x-2"
+                  >
                     <Download className="w-4 h-4" />
                     <span>Descargar certificado</span>
                   </button>
@@ -624,7 +730,7 @@ const AppointmentDetails = () => {
                 </button>
                 
                 <button
-                  onClick={() => navigate('/client/support')}
+                  onClick={handleContactSupport}
                   className="btn btn-secondary btn-sm w-full"
                 >
                   Contactar soporte
@@ -687,6 +793,66 @@ const AppointmentDetails = () => {
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Message Modal */}
+      {showMessageModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                Enviar mensaje al chofer
+              </h3>
+              <button
+                onClick={() => setShowMessageModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Tu mensaje
+                </label>
+                <textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Escribe tu mensaje aquí..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                  rows={4}
+                />
+              </div>
+              
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowMessageModal(false)}
+                  className="btn btn-secondary btn-md flex-1"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSendMessage}
+                  disabled={sendingMessage || !message.trim()}
+                  className="btn btn-primary btn-md flex-1 flex items-center justify-center space-x-2"
+                >
+                  {sendingMessage ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Enviando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4" />
+                      <span>Enviar</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

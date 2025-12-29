@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { 
   User, 
   Car, 
@@ -28,9 +28,15 @@ const Profile = () => {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('personal')
   const [driverStats, setDriverStats] = useState(null)
-  const [vehicle, setVehicle] = useState(null)
   const [avatar, setAvatar] = useState(null)
   const [avatarPreview, setAvatarPreview] = useState(null)
+  const [documents, setDocuments] = useState({
+    license: null,
+    proofOfAddress: null,
+    ine: null,
+    termsAccepted: false
+  })
+  const [documentPreviews, setDocumentPreviews] = useState({})
   const [showPassword, setShowPassword] = useState({
     current: false,
     new: false,
@@ -57,14 +63,11 @@ const Profile = () => {
     }
   })
 
-  const vehicleForm = useForm({
+  const documentsForm = useForm({
     defaultValues: {
-      make: '',
-      model: '',
-      year: '',
-      licensePlate: '',
-      color: '',
-      type: ''
+      licenseNumber: '',
+      licenseExpiry: '',
+      termsAccepted: false
     }
   })
 
@@ -76,33 +79,39 @@ const Profile = () => {
     promotions: false
   })
 
+  const hasFetched = useRef(false)
+
   useEffect(() => {
-    fetchProfileData()
+    if (!hasFetched.current) {
+      hasFetched.current = true
+      fetchProfileData()
+    }
   }, [])
 
   const fetchProfileData = async () => {
     try {
       setLoading(true)
       
-      // Fetch driver stats
+      // Simplificar para evitar bucles - solo datos básicos
       const statsResponse = await driverService.getStats()
       setDriverStats(statsResponse.data)
       
-      // Fetch vehicle info
       const vehicleResponse = await driverService.getVehicle()
       setVehicle(vehicleResponse.data)
       
-      // Set form values
-      personalForm.reset({
-        name: user.name || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        address: user.address || '',
-        emergencyContact: user.emergencyContact || '',
-        emergencyPhone: user.emergencyPhone || ''
-      })
-
-      if (vehicleResponse.data) {
+      // Resetear formularios solo una vez
+      if (user && !personalForm.formState.isDirty) {
+        personalForm.reset({
+          name: user.name || '',
+          email: user.email || '',
+          phone: user.phone || '',
+          address: user.address || '',
+          emergencyContact: user.emergencyContact || '',
+          emergencyPhone: user.emergencyPhone || ''
+        })
+      }
+      
+      if (vehicleResponse.data && !vehicleForm.formState.isDirty) {
         vehicleForm.reset({
           make: vehicleResponse.data.make || '',
           model: vehicleResponse.data.model || '',
@@ -112,9 +121,8 @@ const Profile = () => {
           type: vehicleResponse.data.type || ''
         })
       }
-      
     } catch (error) {
-      console.error('Error al cargar datos del perfil:', error)
+      toast.error('Error al cargar datos del perfil')
     } finally {
       setLoading(false)
     }
@@ -185,13 +193,51 @@ const Profile = () => {
     }
   }
 
-  const updateVehicleInfo = async (data) => {
+  const handleDocumentChange = (docType, event) => {
+    const file = event.target.files[0]
+    if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('El archivo debe ser menor a 10MB')
+        return
+      }
+      
+      setDocuments(prev => ({ ...prev, [docType]: file }))
+      
+      // Create preview for PDFs and images
+      if (file.type.startsWith('image/') || file.type === 'application/pdf') {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          setDocumentPreviews(prev => ({ ...prev, [docType]: e.target.result }))
+        }
+        reader.readAsDataURL(file)
+      }
+    }
+  }
+
+  const uploadDocuments = async () => {
+    if (!documents.license || !documents.proofOfAddress || !documents.ine) {
+      toast.error('Debes subir todos los documentos requeridos')
+      return
+    }
+    
+    if (!documentsForm.getValues('termsAccepted')) {
+      toast.error('Debes aceptar los términos y condiciones')
+      return
+    }
+
     try {
-      const response = await driverService.updateVehicle(data)
-      setVehicle(response.data)
-      toast.success('Información del vehículo actualizada')
+      const formData = new FormData()
+      formData.append('license', documents.license)
+      formData.append('proofOfAddress', documents.proofOfAddress)
+      formData.append('ine', documents.ine)
+      formData.append('licenseNumber', documentsForm.getValues('licenseNumber'))
+      formData.append('licenseExpiry', documentsForm.getValues('licenseExpiry'))
+      formData.append('termsAccepted', documentsForm.getValues('termsAccepted'))
+      
+      const response = await driverService.uploadDocuments(user.id, formData)
+      toast.success('Documentos subidos correctamente')
     } catch (error) {
-      toast.error('Error al actualizar el vehículo')
+      toast.error('Error al subir los documentos')
     }
   }
 
@@ -215,7 +261,7 @@ const Profile = () => {
 
   const tabs = [
     { id: 'personal', label: 'Información Personal', icon: User },
-    { id: 'vehicle', label: 'Vehículo', icon: Car },
+    { id: 'documents', label: 'Documentos', icon: Shield },
     { id: 'security', label: 'Seguridad', icon: Shield },
     { id: 'notifications', label: 'Notificaciones', icon: Bell }
   ]
@@ -239,7 +285,6 @@ const Profile = () => {
   if (loading) {
     return <LoadingSpinner text="Cargando perfil..." />
   }
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -287,7 +332,7 @@ const Profile = () => {
                   <div className="flex items-center space-x-1">
                     <Star className="w-4 h-4 text-yellow-400 fill-current" />
                     <span className="text-sm font-medium text-gray-900">
-                      {driverStats?.rating || '5.0'}
+                      {driverStats?.rating?.average || driverStats?.rating || '5.0'}
                     </span>
                   </div>
                   <div className="flex items-center space-x-1">
@@ -340,7 +385,7 @@ const Profile = () => {
                 <div>
                   <p className="text-sm text-gray-500">Calificación</p>
                   <p className="text-xl font-semibold text-gray-900">
-                    {driverStats.rating}/5.0
+                    {typeof driverStats.rating === 'object' ? driverStats.rating.average : driverStats.rating}/5.0
                   </p>
                 </div>
               </div>
@@ -411,10 +456,13 @@ const Profile = () => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-name" className="block text-sm font-medium text-gray-700 mb-2">
                       Nombre completo
                     </label>
                     <input
+                      id="driver-name"
+                      type="text"
+                      autoComplete="name"
                       {...personalForm.register('name', { required: 'El nombre es requerido' })}
                       className="input input-md w-full"
                     />
@@ -426,11 +474,13 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-email" className="block text-sm font-medium text-gray-700 mb-2">
                       Email
                     </label>
                     <input
+                      id="driver-email"
                       type="email"
+                      autoComplete="email"
                       {...personalForm.register('email', { 
                         required: 'El email es requerido',
                         pattern: {
@@ -448,11 +498,13 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-phone" className="block text-sm font-medium text-gray-700 mb-2">
                       Teléfono
                     </label>
                     <input
+                      id="driver-phone"
                       type="tel"
+                      autoComplete="tel"
                       {...personalForm.register('phone', { required: 'El teléfono es requerido' })}
                       className="input input-md w-full"
                     />
@@ -464,31 +516,39 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-address" className="block text-sm font-medium text-gray-700 mb-2">
                       Dirección
                     </label>
                     <input
+                      id="driver-address"
+                      type="text"
+                      autoComplete="street-address"
                       {...personalForm.register('address')}
                       className="input input-md w-full"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-emergency-contact" className="block text-sm font-medium text-gray-700 mb-2">
                       Contacto de emergencia
                     </label>
                     <input
+                      id="driver-emergency-contact"
+                      type="text"
+                      autoComplete="name"
                       {...personalForm.register('emergencyContact')}
                       className="input input-md w-full"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-emergency-phone" className="block text-sm font-medium text-gray-700 mb-2">
                       Teléfono de emergencia
                     </label>
                     <input
+                      id="driver-emergency-phone"
                       type="tel"
+                      autoComplete="tel"
                       {...personalForm.register('emergencyPhone')}
                       className="input input-md w-full"
                     />
@@ -508,126 +568,234 @@ const Profile = () => {
               </form>
             )}
 
-            {/* Vehicle Tab */}
-            {activeTab === 'vehicle' && (
-              <form onSubmit={vehicleForm.handleSubmit(updateVehicleInfo)} className="space-y-6">
+            {/* Documents Tab */}
+            {activeTab === 'documents' && (
+              <div className="space-y-6">
                 <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                  Vehículo de Trabajo
+                  Documentos de Identificación
                 </h2>
                 
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Importante:</strong> Debes subir los siguientes documentos para verificar tu cuenta:
+                  </p>
+                  <ul className="list-disc list-inside mt-2 text-sm text-yellow-700">
+                    <li>Licencia de conducir vigente</li>
+                    <li>Comprobante de domicilio (reciente)</li>
+                    <li>INE/Identificación oficial</li>
+                  </ul>
+                </div>
+
+                {/* License Information */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Marca
+                    <label htmlFor="license-number" className="block text-sm font-medium text-gray-700 mb-2">
+                      Número de Licencia
                     </label>
                     <input
-                      {...vehicleForm.register('make', { required: 'La marca es requerida' })}
+                      id="license-number"
+                      {...documentsForm.register('licenseNumber', { required: 'El número de licencia es requerido' })}
                       className="input input-md w-full"
                     />
-                    {vehicleForm.formState.errors.make && (
+                    {documentsForm.formState.errors.licenseNumber && (
                       <p className="text-error-600 text-sm mt-1">
-                        {vehicleForm.formState.errors.make.message}
+                        {documentsForm.formState.errors.licenseNumber.message}
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Modelo
+                    <label htmlFor="license-expiry" className="block text-sm font-medium text-gray-700 mb-2">
+                      Fecha de Vencimiento
                     </label>
                     <input
-                      {...vehicleForm.register('model', { required: 'El modelo es requerido' })}
+                      id="license-expiry"
+                      type="date"
+                      {...documentsForm.register('licenseExpiry', { required: 'La fecha de vencimiento es requerida' })}
                       className="input input-md w-full"
                     />
-                    {vehicleForm.formState.errors.model && (
+                    {documentsForm.formState.errors.licenseExpiry && (
                       <p className="text-error-600 text-sm mt-1">
-                        {vehicleForm.formState.errors.model.message}
+                        {documentsForm.formState.errors.licenseExpiry.message}
                       </p>
                     )}
+                  </div>
+                </div>
+
+                {/* Document Uploads */}
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Licencia de Conducir
+                    </label>
+                    <div className="flex items-center space-x-4">
+                      <label className="flex-1 cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => handleDocumentChange('license', e)}
+                          className="hidden"
+                        />
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary-500 transition-colors">
+                          {documentPreviews.license ? (
+                            <div className="space-y-2">
+                              <p className="text-sm text-green-600 font-medium">
+                                {documents.license?.name}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  setDocuments(prev => ({ ...prev, license: null }))
+                                  setDocumentPreviews(prev => ({ ...prev, license: null }))
+                                }}
+                                className="text-red-600 hover:text-red-700 text-sm"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Camera className="w-8 h-8 text-gray-400 mx-auto" />
+                              <p className="text-sm text-gray-600">
+                                Haz clic para subir o arrastra el archivo
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                PNG, JPG, PDF (Máx. 10MB)
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Año
+                      Comprobante de Domicilio
                     </label>
-                    <input
-                      type="number"
-                      min="1990"
-                      max={new Date().getFullYear()}
-                      {...vehicleForm.register('year', { required: 'El año es requerido' })}
-                      className="input input-md w-full"
-                    />
-                    {vehicleForm.formState.errors.year && (
-                      <p className="text-error-600 text-sm mt-1">
-                        {vehicleForm.formState.errors.year.message}
-                      </p>
-                    )}
+                    <div className="flex items-center space-x-4">
+                      <label className="flex-1 cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => handleDocumentChange('proofOfAddress', e)}
+                          className="hidden"
+                        />
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary-500 transition-colors">
+                          {documentPreviews.proofOfAddress ? (
+                            <div className="space-y-2">
+                              <p className="text-sm text-green-600 font-medium">
+                                {documents.proofOfAddress?.name}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  setDocuments(prev => ({ ...prev, proofOfAddress: null }))
+                                  setDocumentPreviews(prev => ({ ...prev, proofOfAddress: null }))
+                                }}
+                                className="text-red-600 hover:text-red-700 text-sm"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Camera className="w-8 h-8 text-gray-400 mx-auto" />
+                              <p className="text-sm text-gray-600">
+                                Haz clic para subir o arrastra el archivo
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                PNG, JPG, PDF (Máx. 10MB)
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </div>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Placa
+                      INE / Identificación Oficial
                     </label>
-                    <input
-                      {...vehicleForm.register('licensePlate', { required: 'La placa es requerida' })}
-                      className="input input-md w-full"
-                    />
-                    {vehicleForm.formState.errors.licensePlate && (
-                      <p className="text-error-600 text-sm mt-1">
-                        {vehicleForm.formState.errors.licensePlate.message}
-                      </p>
-                    )}
+                    <div className="flex items-center space-x-4">
+                      <label className="flex-1 cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*,.pdf"
+                          onChange={(e) => handleDocumentChange('ine', e)}
+                          className="hidden"
+                        />
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-primary-500 transition-colors">
+                          {documentPreviews.ine ? (
+                            <div className="space-y-2">
+                              <p className="text-sm text-green-600 font-medium">
+                                {documents.ine?.name}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  setDocuments(prev => ({ ...prev, ine: null }))
+                                  setDocumentPreviews(prev => ({ ...prev, ine: null }))
+                                }}
+                                className="text-red-600 hover:text-red-700 text-sm"
+                              >
+                                Eliminar
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <Camera className="w-8 h-8 text-gray-400 mx-auto" />
+                              <p className="text-sm text-gray-600">
+                                Haz clic para subir o arrastra el archivo
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                PNG, JPG, PDF (Máx. 10MB)
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    </div>
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Color
-                    </label>
+                {/* Terms and Conditions */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <label className="flex items-start space-x-3 cursor-pointer">
                     <input
-                      {...vehicleForm.register('color', { required: 'El color es requerido' })}
-                      className="input input-md w-full"
+                      type="checkbox"
+                      {...documentsForm.register('termsAccepted', { required: 'Debes aceptar los términos y condiciones' })}
+                      className="mt-1 h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                     />
-                    {vehicleForm.formState.errors.color && (
-                      <p className="text-error-600 text-sm mt-1">
-                        {vehicleForm.formState.errors.color.message}
+                    <div className="text-sm">
+                      <p className="text-gray-700">
+                        Acepto los <a href="#" className="text-primary-600 hover:text-primary-700 underline">términos y condiciones</a> y autorizo el tratamiento de mis datos personales según la política de privacidad.
                       </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tipo de vehículo
-                    </label>
-                    <select
-                      {...vehicleForm.register('type', { required: 'El tipo es requerido' })}
-                      className="input input-md w-full"
-                    >
-                      <option value="">Seleccionar tipo</option>
-                      <option value="sedan">Sedán</option>
-                      <option value="suv">SUV</option>
-                      <option value="pickup">Pickup</option>
-                      <option value="van">Van</option>
-                      <option value="motorcycle">Motocicleta</option>
-                    </select>
-                    {vehicleForm.formState.errors.type && (
-                      <p className="text-error-600 text-sm mt-1">
-                        {vehicleForm.formState.errors.type.message}
-                      </p>
-                    )}
-                  </div>
+                      {documentsForm.formState.errors.termsAccepted && (
+                        <p className="text-error-600 text-sm mt-1">
+                          {documentsForm.formState.errors.termsAccepted.message}
+                        </p>
+                      )}
+                    </div>
+                  </label>
                 </div>
 
                 <div className="flex justify-end">
                   <button
-                    type="submit"
-                    disabled={vehicleForm.formState.isSubmitting}
-                    className="btn btn-primary btn-md flex items-center space-x-2"
+                    type="button"
+                    onClick={uploadDocuments}
+                    disabled={!documents.license || !documents.proofOfAddress || !documents.ine || !documentsForm.getValues('termsAccepted')}
+                    className="btn btn-primary btn-md flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4" />
-                    <span>Guardar cambios</span>
+                    <span>Subir Documentos</span>
                   </button>
                 </div>
-              </form>
+              </div>
             )}
 
             {/* Security Tab */}
@@ -639,12 +807,14 @@ const Profile = () => {
                 
                 <div className="max-w-md space-y-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-current-password" className="block text-sm font-medium text-gray-700 mb-2">
                       Contraseña actual
                     </label>
                     <div className="relative">
                       <input
+                        id="driver-current-password"
                         type={showPassword.current ? 'text' : 'password'}
+                        autoComplete="current-password"
                         {...securityForm.register('currentPassword', { required: 'La contraseña actual es requerida' })}
                         className="input input-md w-full pr-10"
                       />
@@ -664,12 +834,14 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-new-password" className="block text-sm font-medium text-gray-700 mb-2">
                       Nueva contraseña
                     </label>
                     <div className="relative">
                       <input
+                        id="driver-new-password"
                         type={showPassword.new ? 'text' : 'password'}
+                        autoComplete="new-password"
                         {...securityForm.register('newPassword', { 
                           required: 'La nueva contraseña es requerida',
                           minLength: {
@@ -695,12 +867,14 @@ const Profile = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="driver-confirm-password" className="block text-sm font-medium text-gray-700 mb-2">
                       Confirmar nueva contraseña
                     </label>
                     <div className="relative">
                       <input
+                        id="driver-confirm-password"
                         type={showPassword.confirm ? 'text' : 'password'}
+                        autoComplete="new-password"
                         {...securityForm.register('confirmPassword', { required: 'Confirma la nueva contraseña' })}
                         className="input input-md w-full pr-10"
                       />

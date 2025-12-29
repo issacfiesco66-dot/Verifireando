@@ -1,4 +1,6 @@
 // PWA Service for managing service worker, installation, and push notifications
+import { notificationAPI } from './api'
+
 class PWAService {
   constructor() {
     this.deferredPrompt = null
@@ -6,16 +8,48 @@ class PWAService {
     this.isStandalone = false
     this.swRegistration = null
     this.pushSubscription = null
+    this.isInitialized = false
+    this.listenersSetup = false
     
-    this.init()
+    // Initialize only in production mode and secure context
+    if (!import.meta.env.DEV && typeof window !== 'undefined') {
+      // Verificar contexto seguro antes de inicializar
+      const isSecureContext = window.isSecureContext || 
+                              window.location.protocol === 'https:' || 
+                              ['localhost', '127.0.0.1'].includes(window.location.hostname)
+      
+      if (isSecureContext) {
+        this.init()
+      }
+      // Si no es contexto seguro, no inicializar (comportamiento esperado en HTTP)
+    }
   }
 
   // Initialize PWA service
   async init() {
+    if (this.isInitialized) {
+      return
+    }
+    
+    // Verificar contexto seguro antes de inicializar
+    const isSecureContext = typeof window !== 'undefined' && (
+      window.isSecureContext || 
+      window.location.protocol === 'https:' || 
+      ['localhost', '127.0.0.1'].includes(window.location.hostname)
+    )
+    
+    // Skip PWA initialization en desarrollo o si no es contexto seguro
+    if (import.meta.env.DEV || !isSecureContext) {
+      this.isInitialized = true
+      return
+    }
+    
     this.checkInstallationStatus()
     this.setupEventListeners()
     await this.registerServiceWorker()
     await this.setupPushNotifications()
+    
+    this.isInitialized = true
   }
 
   // Check if app is installed or running in standalone mode
@@ -32,13 +66,21 @@ class PWAService {
 
   // Setup event listeners for PWA events
   setupEventListeners() {
-    // Listen for install prompt
+    // Avoid duplicate listeners
+    if (this.listenersSetup) {
+      return
+    }
+    
+    // Listen for install prompt - NO PREVENTDEFAULT PARA QUE APAREZCA EL BANNER
     window.addEventListener('beforeinstallprompt', (e) => {
       console.log('PWA: Install prompt available')
-      e.preventDefault()
+      // NO hacer e.preventDefault() para permitir el banner nativo
+      // e.preventDefault()  // <-- COMENTADO PARA PERMITIR BANNER
       this.deferredPrompt = e
       this.dispatchEvent('installPromptAvailable', { prompt: e })
     })
+    
+    this.listenersSetup = true
 
     // Listen for app installed
     window.addEventListener('appinstalled', (e) => {
@@ -67,8 +109,40 @@ class PWAService {
 
   // Register service worker
   async registerServiceWorker() {
+    // Skip service worker registration in development
+    if (import.meta.env.DEV) {
+      console.log('PWA: Service Worker registration skipped in development mode')
+      return null
+    }
+
     if ('serviceWorker' in navigator) {
       try {
+        // Ensure secure context (HTTPS or localhost)
+        const isSecureContext = window.isSecureContext || window.location.protocol === 'https:' || ['localhost','127.0.0.1'].includes(window.location.hostname)
+        if (!isSecureContext) {
+          console.warn('PWA: Insecure context detected, skipping Service Worker registration')
+          return null
+        }
+
+        // Preflight check for sw.js availability and correct MIME type
+        let contentType = ''
+        try {
+          const res = await fetch('/sw.js', { method: 'GET', cache: 'no-store' })
+          if (!res.ok) {
+            console.warn('PWA: /sw.js not found (status', res.status, '), skipping registration')
+            return null
+          }
+          contentType = res.headers.get('content-type') || ''
+        } catch (e) {
+          console.warn('PWA: Failed to fetch /sw.js preflight, skipping registration:', e?.message || e)
+          return null
+        }
+
+        if (!/javascript/.test(contentType)) {
+          console.warn('PWA: /sw.js has unsupported MIME type:', contentType, '- skipping registration')
+          return null
+        }
+
         const registration = await navigator.serviceWorker.register('/sw.js', {
           scope: '/'
         })
@@ -96,19 +170,33 @@ class PWAService {
 
         return registration
       } catch (error) {
-        console.error('PWA: Service Worker registration failed:', error)
-        throw error
+        // Silently fail if not in secure context (HTTP without HTTPS)
+        const isSecureContext = window.isSecureContext || window.location.protocol === 'https:'
+        if (!isSecureContext) {
+          // Don't log error for HTTP sites - this is expected behavior
+          return null
+        }
+        console.warn('PWA: Service Worker registration failed:', error.message || error)
+        // Don't throw to avoid breaking runtime if SW cannot be registered
+        return null
       }
     } else {
-      console.warn('PWA: Service Workers not supported')
+      // Silently skip if Service Workers not supported - this is normal for some browsers
       return null
     }
   }
 
   // Setup push notifications
   async setupPushNotifications() {
+    // Check for secure context first
+    const isSecureContext = window.isSecureContext || window.location.protocol === 'https:'
+    if (!isSecureContext) {
+      // Silently skip push notifications on HTTP - this is expected
+      return false
+    }
+    
     if (!this.swRegistration || !('PushManager' in window)) {
-      console.warn('PWA: Push notifications not supported')
+      // Silently skip if not supported - this is normal
       return false
     }
 
@@ -164,7 +252,7 @@ class PWAService {
       
       if (!subscription) {
         // Create new subscription
-        const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY
+        const vapidPublicKey = import.meta.env.VITE_FIREBASE_VAPID_KEY
         
         if (!vapidPublicKey) {
           console.warn('PWA: VAPID public key not configured')
@@ -193,20 +281,26 @@ class PWAService {
 
   // Send push subscription to server
   async sendSubscriptionToServer(subscription) {
+    // Skip sending subscription in development mode
+    if (import.meta.env.DEV) {
+      console.log('PWA: Skipping push subscription in development mode')
+      return
+    }
+
+    // Check if user is authenticated
+    const token = localStorage.getItem('token')
+    if (!token) {
+      console.log('PWA: User not authenticated, skipping push subscription')
+      return
+    }
+
     try {
-      const response = await fetch('/api/notifications/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          subscription: subscription.toJSON(),
-          userAgent: navigator.userAgent
-        })
+      const response = await notificationAPI.post('/subscribe', {
+        subscription: subscription.toJSON(),
+        userAgent: navigator.userAgent
       })
 
-      if (response.ok) {
+      if (response.status === 200) {
         console.log('PWA: Push subscription sent to server')
       } else {
         console.error('PWA: Failed to send subscription to server')
@@ -303,8 +397,8 @@ class PWAService {
     try {
       const defaultOptions = {
         body: '',
-        icon: '/logo192.png',
-        badge: '/logo192.png',
+        icon: '/icon-192.svg',
+        badge: '/icon-192.svg',
         tag: 'default',
         requireInteraction: false,
         actions: []
@@ -336,8 +430,11 @@ class PWAService {
 
   // Utility function to convert VAPID key
   urlBase64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4)
-    const base64 = (base64String + padding)
+    // Limpiar la VAPID key - remover espacios y saltos de línea
+    const cleanBase64 = base64String.replace(/\s/g, '')
+    
+    const padding = '='.repeat((4 - cleanBase64.length % 4) % 4)
+    const base64 = (cleanBase64 + padding)
       .replace(/-/g, '+')
       .replace(/_/g, '/')
 

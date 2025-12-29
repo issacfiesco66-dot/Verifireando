@@ -28,7 +28,7 @@ const markAsReadSchema = Joi.object({
 });
 
 // Función para enviar notificación
-async function sendNotificationToRecipient(notification) {
+async function sendNotificationToRecipient(notification, io) {
   try {
     let success = false;
     let error = null;
@@ -58,14 +58,34 @@ async function sendNotificationToRecipient(notification) {
           error = pushError.message;
         }
       } else {
-        error = 'Token FCM no disponible';
+        // No hay token FCM, usar Socket.IO como fallback
+        if (io) {
+          const notificationData = {
+            _id: notification._id,
+            title: notification.title,
+            message: notification.message,
+            type: notification.type,
+            data: notification.data,
+            createdAt: notification.createdAt,
+            read: false
+          };
+          
+          // Emitir a la sala del usuario
+          io.to(`user-${notification.recipient}`).emit('new-notification', notificationData);
+          success = true;
+          logger.info(`Notificación Socket.IO enviada a ${recipient.email}`);
+        }
       }
     }
 
     // Enviar mensaje WhatsApp
     if (notification.channel === 'whatsapp' || notification.channel === 'both') {
       try {
-        await sendWhatsAppMessage(recipient.phone, notification.message);
+        await sendWhatsAppMessage(
+          recipient.phone,
+          notification.message,
+          notification.data
+        );
         success = true;
         logger.info(`Mensaje WhatsApp enviado a ${recipient.phone}`);
       } catch (whatsappError) {
@@ -127,7 +147,8 @@ router.post('/send', auth, authorize('admin'), async (req, res) => {
 
       // Enviar inmediatamente si no está programada
       if (!value.scheduledFor) {
-        const result = await sendNotificationToRecipient(notification);
+        const io = req.app.get('io');
+        const result = await sendNotificationToRecipient(notification, io);
         results.push({
           recipientId,
           notificationId: notification._id,
@@ -575,7 +596,38 @@ router.post('/admin/test', auth, authorize('admin'), async (req, res) => {
   }
 });
 
-// Endpoint para suscribirse a notificaciones push
+// Endpoint para registrar token FCM (Reemplaza a /subscribe si se usa FCM)
+router.post('/register-token', auth, async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ message: 'Token FCM requerido' });
+    }
+
+    // Determinar el modelo basado en el rol del usuario
+    const Model = req.userRole === 'driver' ? Driver : User;
+    
+    // Actualizar el usuario con el token FCM
+    await Model.findByIdAndUpdate(req.userId, {
+      fcmToken: token,
+      lastPushSubscriptionUpdate: new Date()
+    });
+
+    logger.info(`Token FCM registrado para ${req.userRole}: ${req.userId}`);
+
+    res.status(200).json({ 
+      message: 'Token FCM registrado exitosamente',
+      success: true 
+    });
+
+  } catch (error) {
+    logger.error('Error registrando token FCM:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Endpoint para suscribirse a notificaciones push (Legacy)
 router.post('/subscribe', auth, async (req, res) => {
   try {
     const { subscription, userAgent } = req.body;

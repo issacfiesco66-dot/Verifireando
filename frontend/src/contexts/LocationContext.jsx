@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react'
 import { useAuth } from './AuthContext'
-import { useSocket } from './SocketContext'
 import { toast } from 'react-hot-toast'
 
 const LocationContext = createContext()
@@ -27,20 +26,6 @@ const locationReducer = (state, action) => {
       return { ...state, watching: action.payload }
     case 'SET_PERMISSION':
       return { ...state, permission: action.payload }
-    case 'UPDATE_DRIVER_LOCATION':
-      return {
-        ...state,
-        driverLocations: {
-          ...state.driverLocations,
-          [action.payload.driverId]: action.payload.location,
-        },
-      }
-    case 'REMOVE_DRIVER_LOCATION':
-      const { [action.payload]: removed, ...rest } = state.driverLocations
-      return {
-        ...state,
-        driverLocations: rest,
-      }
     case 'SET_ADDRESS':
       return { ...state, currentAddress: action.payload }
     default:
@@ -51,7 +36,6 @@ const locationReducer = (state, action) => {
 const initialState = {
   currentLocation: null,
   currentAddress: null,
-  driverLocations: {},
   loading: false,
   watching: false,
   error: null,
@@ -61,7 +45,6 @@ const initialState = {
 export const LocationProvider = ({ children }) => {
   const [state, dispatch] = useReducer(locationReducer, initialState)
   const { user } = useAuth()
-  const { updateDriverLocation, subscribe } = useSocket()
   const watchId = React.useRef(null)
 
   // Check geolocation support and permission
@@ -76,19 +59,6 @@ export const LocationProvider = ({ children }) => {
       })
     }
   }, [])
-
-  // Subscribe to driver location updates
-  useEffect(() => {
-    const unsubscribe = subscribe('driver-location-updated', (event) => {
-      const { driverId, location } = event.detail
-      dispatch({ 
-        type: 'UPDATE_DRIVER_LOCATION', 
-        payload: { driverId, location } 
-      })
-    })
-
-    return unsubscribe
-  }, [subscribe])
 
   // Get current position
   const getCurrentLocation = () => {
@@ -171,35 +141,31 @@ export const LocationProvider = ({ children }) => {
         }
         
         dispatch({ type: 'SET_CURRENT_LOCATION', payload: location })
-        
-        // Update driver location via socket if user is a driver
-        if (user?.role === 'driver') {
-          updateDriverLocation(location)
-        }
       },
       (error) => {
-        console.error('Watch position error:', error)
         let errorMessage = 'Error watching location'
         
         switch (error.code) {
           case error.PERMISSION_DENIED:
+            console.error('Watch position error: Permission denied')
             errorMessage = 'Acceso a ubicación denegado'
             stopWatching()
             break
           case error.POSITION_UNAVAILABLE:
+            console.warn('Watch position: Position unavailable')
             errorMessage = 'Ubicación no disponible'
             break
           case error.TIMEOUT:
-            errorMessage = 'Tiempo de espera agotado'
-            break
+            // No mostrar error en consola para timeouts, es normal en interiores
+            return
         }
         
         dispatch({ type: 'SET_ERROR', payload: errorMessage })
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 60000, // 1 minute
+        timeout: 30000,
+        maximumAge: 120000, // 2 minutes
       }
     )
   }
@@ -216,8 +182,10 @@ export const LocationProvider = ({ children }) => {
   // Get address from coordinates using reverse geocoding
   const getAddressFromCoordinates = async (latitude, longitude) => {
     try {
+      // Usar token de Mapbox para desarrollo
+      const mapboxToken = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN || 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw';
       const response = await fetch(
-        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${import.meta.env.VITE_MAPBOX_ACCESS_TOKEN}&language=es`
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${mapboxToken}&language=es`
       )
       
       if (response.ok) {
@@ -233,6 +201,11 @@ export const LocationProvider = ({ children }) => {
     }
     return null
   }
+
+  // Alias para reverseGeocode (compatibilidad)
+  const reverseGeocode = async (longitude, latitude) => {
+    return await getAddressFromCoordinates(latitude, longitude);
+  };
 
   // Get coordinates from address using geocoding
   const getCoordinatesFromAddress = async (address) => {
@@ -302,11 +275,9 @@ export const LocationProvider = ({ children }) => {
     }
     
     return () => {
-      if (user?.role === 'driver') {
-        stopWatching()
-      }
+      stopWatching()
     }
-  }, [user, state.permission])
+  }, []) // Sin dependencias para evitar bucles infinitos
 
   const value = {
     currentLocation: state.currentLocation,
@@ -321,6 +292,7 @@ export const LocationProvider = ({ children }) => {
     stopWatching,
     getAddressFromCoordinates,
     getCoordinatesFromAddress,
+    reverseGeocode,
     calculateDistance,
     findNearbyDrivers,
     requestLocationPermission,

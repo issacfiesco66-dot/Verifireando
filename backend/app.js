@@ -7,9 +7,8 @@ const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
 const http = require('http');
-const socketIo = require('socket.io');
 const fs = require('fs');
-require('dotenv').config();
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Importar utilidades
 const logger = require('./utils/logger');
@@ -23,54 +22,18 @@ const driverRoutes = require('./routes/drivers');
 const carRoutes = require('./routes/cars');
 const appointmentRoutes = require('./routes/appointments');
 const paymentRoutes = require('./routes/payments');
+const publicPaymentRoutes = require('./routes/public-payments');
 const notificationRoutes = require('./routes/notifications');
 const serviceRoutes = require('./routes/services');
 const diagnosticsRoutes = require('./routes/diagnostics');
+const adminRoutes = require('./routes/admin');
+const devToolsRoutes = require('./routes/dev-tools');
+const driverProfileRoutes = require('./routes/driver-profile');
 
 // Crear aplicación Express
 const app = express();
+app.set('trust proxy', true);
 const server = http.createServer(app);
-
-// Configurar Socket.IO
-const io = socketIo(server, {
-  cors: {
-    origin: function (origin, callback) {
-      // Usar la misma lógica de CORS que el resto de la aplicación
-      const defaultOrigins = [
-        'http://localhost:3000',
-        'http://localhost:5173',
-        'https://localhost:3000',
-        'https://localhost:5173'
-      ];
-      
-      const envOrigins = process.env.ALLOWED_ORIGINS 
-        ? process.env.ALLOWED_ORIGINS.split(',').map(origin => origin.trim())
-        : [];
-      
-      const frontendUrl = process.env.FRONTEND_URL;
-      if (frontendUrl) {
-        envOrigins.push(frontendUrl);
-      }
-      
-      const allowedOrigins = [...defaultOrigins, ...envOrigins];
-      
-      if (process.env.NODE_ENV === 'development') {
-        return callback(null, true);
-      }
-      
-      if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-        callback(null, true);
-      } else {
-        callback(new Error('No permitido por CORS en Socket.IO'));
-      }
-    },
-    methods: ["GET", "POST"],
-    credentials: true
-  }
-});
-
-// Hacer io disponible globalmente
-app.set('io', io);
 
 // Configuración de CORS
 const corsOptions = {
@@ -79,8 +42,10 @@ const corsOptions = {
     const defaultOrigins = [
       'http://localhost:3000',
       'http://localhost:5173', // Vite dev server
+      'http://localhost:5174', // Puerto actual del frontend
       'https://localhost:3000',
-      'https://localhost:5173'
+      'https://localhost:5173',
+      'https://localhost:5174' // Puerto actual del frontend
     ];
     
     // Obtener dominios adicionales desde variables de entorno
@@ -148,7 +113,7 @@ const limiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: process.env.NODE_ENV === 'production' ? 5 : 50, // 50 intentos en desarrollo, 5 en producción
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 500 intentos en desarrollo (React StrictMode), 5 en producción
   message: {
     error: 'Demasiados intentos de autenticación, intenta de nuevo más tarde.'
   },
@@ -173,11 +138,14 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Servir archivos estáticos
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// COMENTAR ESTO TAMBIÉN
+/*
 // Middleware para agregar io a req
 app.use((req, res, next) => {
   req.io = io;
   next();
 });
+*/
 
 // Health check
 app.get('/health', (req, res) => {
@@ -208,9 +176,13 @@ app.use('/api/drivers', driverRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/public-payments', publicPaymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/diagnostics', diagnosticsRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/dev-tools', devToolsRoutes);
+app.use('/api/driver', driverProfileRoutes);
 
 // Ruta para servir el frontend en producción
 if (process.env.NODE_ENV === 'production') {
@@ -303,92 +275,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Configuración de Socket.IO
-io.on('connection', (socket) => {
-  logger.info(`Cliente conectado: ${socket.id}`);
-
-  // Unirse a sala de usuario
-  socket.on('join-user-room', (userId) => {
-    socket.join(`user-${userId}`);
-    logger.info(`Usuario ${userId} se unió a su sala`);
-  });
-
-  // Unirse a sala de chofer
-  socket.on('join-driver-room', (driverId) => {
-    socket.join(`driver-${driverId}`);
-    logger.info(`Chofer ${driverId} se unió a su sala`);
-  });
-
-  // Unirse a sala de cita
-  socket.on('join-appointment-room', (appointmentId) => {
-    socket.join(`appointment-${appointmentId}`);
-    logger.info(`Cliente se unió a sala de cita ${appointmentId}`);
-  });
-
-  // Unirse a sala genérica (compatibilidad con frontend)
-  socket.on('join-room', (room) => {
-    socket.join(room);
-    logger.info(`Cliente ${socket.id} se unió a sala ${room}`);
-  });
-
-  // Actualización de ubicación del chofer (nombre estándar)
-  socket.on('update-location', (data) => {
-    const { driverId, appointmentId, location } = data;
-    if (appointmentId) {
-      io.to(`appointment-${appointmentId}`).emit('driver-location-updated', {
-        driverId,
-        location,
-        timestamp: new Date()
-      });
-    }
-    logger.info(`Ubicación actualizada (update-location) para chofer ${driverId}`);
-  });
-
-  // Actualización de ubicación del chofer (alias soportado)
-  socket.on('driver-location-update', (data) => {
-    const { driverId, appointmentId, location } = data;
-    if (appointmentId) {
-      io.to(`appointment-${appointmentId}`).emit('driver-location-updated', {
-        driverId,
-        location,
-        timestamp: new Date()
-      });
-    }
-    logger.info(`Ubicación actualizada (driver-location-update) para chofer ${driverId}`);
-  });
-
-  // Actualización de estado de cita
-  socket.on('appointment-status-update', (data) => {
-    const { appointmentId, status, location } = data;
-    io.to(`appointment-${appointmentId}`).emit('appointment-updated', {
-      appointmentId,
-      status,
-      location,
-      timestamp: new Date()
-    });
-    logger.info(`Estado de cita ${appointmentId} actualizado a ${status}`);
-  });
-
-  // Notificación en tiempo real
-  socket.on('send-notification', (data) => {
-    const { userId, notification } = data;
-    
-    // Emitir a la sala del usuario
-    socket.to(`user-${userId}`).emit('new-notification', notification);
-    
-    logger.info(`Notificación enviada a usuario ${userId}`);
-  });
-
-  // Desconexión
-  socket.on('disconnect', () => {
-    logger.info(`Cliente desconectado: ${socket.id}`);
-  });
-
-  // Manejo de errores de socket
-  socket.on('error', (error) => {
-    logger.error('Error de socket:', error);
-  });
-});
 
 // Función para iniciar el servidor
 async function startServer() {
@@ -402,10 +288,48 @@ async function startServer() {
       logger.warn('⚠️  Iniciando sin conexión a base de datos');
     }
     
+    // Auto-seed en desarrollo si la base de datos está vacía (común con in-memory)
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        const User = require('./models/User');
+        const Service = require('./models/Service');
+        const userCount = await User.countDocuments();
+        const serviceCount = await Service.countDocuments();
+        
+        if (userCount === 0) {
+          logger.info('🌱 Base de datos vacía detectada en desarrollo. Ejecutando seed automático...');
+          const { createUsers, createDrivers, createCars } = require('./scripts/seed');
+          const users = await createUsers();
+          const drivers = await createDrivers();
+          const cars = await createCars(users);
+          
+          if (users.length > 0 && drivers.length > 0) {
+              logger.info('✅ Seed automático completado: Usuarios y Choferes creados.');
+              logger.info('   👤 Cliente: juan@example.com / password123');
+              logger.info('   🚗 Chofer: roberto@example.com / driver123');
+              if (cars.length > 0) {
+                  logger.info(`   🚙 Auto creado para Juan: ${cars[0].plates}`);
+              }
+          }
+        }
+        
+        // Seed de servicios si no existen
+        if (serviceCount === 0) {
+          logger.info('🔧 Creando servicios...');
+          const { services } = require('./scripts/seedServices');
+          const createdServices = await Service.insertMany(services);
+          logger.info(`✅ ${createdServices.length} servicios creados`);
+        }
+      } catch (seedError) {
+        logger.error('❌ Error en seed automático:', seedError);
+      }
+    }
+
+
     // Iniciar servidor
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, () => {
-      logger.info(`🚀 Servidor iniciado en puerto ${PORT}`);
+      logger.info(`Servidor corriendo en puerto ${PORT}`);
       logger.info(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`📊 Health check: http://localhost:${PORT}/health`);
       
@@ -467,4 +391,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, server, io };
+module.exports = { app, server }; // io temporalmente removido

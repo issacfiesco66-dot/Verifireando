@@ -19,6 +19,7 @@ import MapComponent from '../../components/map/MapComponent'
 import PaymentForm from '../../components/payment/PaymentForm'
 import PaymentMethods from '../../components/payment/PaymentMethods'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ServiceSelector from '../../components/common/ServiceSelector'
 import toast from 'react-hot-toast'
 
 const NewAppointment = () => {
@@ -37,6 +38,7 @@ const NewAppointment = () => {
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(null)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [appointmentData, setAppointmentData] = useState(null)
+  const [selectedServices, setSelectedServices] = useState([])
 
   const {
     register,
@@ -49,7 +51,6 @@ const NewAppointment = () => {
       scheduledDate: '',
       scheduledTime: '',
       carId: '',
-      serviceType: 'verification',
       notes: '',
       paymentMethod: 'card'
     }
@@ -110,6 +111,8 @@ const NewAppointment = () => {
       case 3:
         return watchedValues.carId
       case 4:
+        return selectedServices.length > 0
+      case 5:
         return watchedValues.paymentMethod
       default:
         return true
@@ -129,7 +132,7 @@ const NewAppointment = () => {
   }
 
   const onSubmit = async (data) => {
-    if (step < 5) {
+    if (step < 6) {
       return
     }
 
@@ -138,25 +141,48 @@ const NewAppointment = () => {
       try {
         setSubmitting(true)
         
+        // Map to backend/mock appointments expected schema
         const appointmentData = {
-          scheduledDate: new Date(`${data.scheduledDate}T${data.scheduledTime}`),
-          carId: data.carId,
-          serviceType: data.serviceType,
-          location: {
-            type: 'Point',
-            coordinates: [selectedLocation.longitude, selectedLocation.latitude],
-            address: locationAddress
+          car: data.carId,
+          scheduledDate: data.scheduledDate,
+          scheduledTime: data.scheduledTime,
+          services: {
+            verification: true,
+            additionalServices: (selectedServices || [])
+              .filter(s => s.code !== 'verification') // Excluir verification de additionalServices
+              .map(s => ({
+                name: s.code || 'wash',
+                price: s.basePrice || 0
+              }))
           },
-          notes: data.notes,
-          paymentMethod: data.paymentMethod,
-          pricing: calculateAppointmentCost(),
-          paymentStatus: 'pending'
+          pickupAddress: {
+            street: typeof locationAddress === 'string' ? locationAddress : (locationAddress?.street || 'Dirección de recogida'),
+            city: locationAddress?.city || 'Ciudad de México',
+            state: locationAddress?.state || 'CDMX',
+            zipCode: locationAddress?.zipCode || '06700',
+            coordinates: {
+              lat: selectedLocation?.latitude || 19.4326,
+              lng: selectedLocation?.longitude || -99.1332
+            }
+          },
+          deliveryAddress: {
+            street: typeof locationAddress === 'string' ? locationAddress : (locationAddress?.street || 'Dirección de entrega'),
+            city: locationAddress?.city || 'Ciudad de México',
+            state: locationAddress?.state || 'CDMX',
+            zipCode: locationAddress?.zipCode || '06700',
+            coordinates: {
+              lat: selectedLocation?.latitude || 19.4326,
+              lng: selectedLocation?.longitude || -99.1332
+            }
+          },
+          notes: data.notes || '',
+          preferredDriver: null
         }
 
         const response = await appointmentService.createAppointment(appointmentData)
         
         toast.success('Cita programada exitosamente')
-        navigate(`/client/appointments/${response.data.appointment._id}`)
+        navigate('/client/appointments')
         
       } catch (error) {
         toast.error(error.response?.data?.message || 'Error al programar la cita')
@@ -174,20 +200,41 @@ const NewAppointment = () => {
     try {
       setSubmitting(true)
       
+      // Map to backend/mock appointments expected schema
       const appointmentData = {
-        scheduledDate: new Date(`${watchedValues.scheduledDate}T${watchedValues.scheduledTime}`),
-        carId: watchedValues.carId,
-        serviceType: watchedValues.serviceType,
-        location: {
-          type: 'Point',
-          coordinates: [selectedLocation.longitude, selectedLocation.latitude],
-          address: locationAddress
+        car: watchedValues.carId,
+        scheduledDate: watchedValues.scheduledDate,
+        scheduledTime: watchedValues.scheduledTime,
+        services: {
+          verification: true,
+          additionalServices: (selectedServices || [])
+            .map(s => ({
+              name: s.code || 'wash',
+              price: s.basePrice || 0
+            }))
         },
-        notes: watchedValues.notes,
-        paymentMethod: watchedValues.paymentMethod,
-        pricing: calculateAppointmentCost(),
-        paymentStatus: 'paid',
-        paymentIntentId: paymentIntent.id
+        pickupAddress: typeof locationAddress === 'string' ? locationAddress : {
+          street: locationAddress?.street || 'Dirección',
+          city: locationAddress?.city || 'Ciudad',
+          state: locationAddress?.state || 'Estado',
+          zipCode: locationAddress?.zipCode || '00000',
+          coordinates: {
+            lat: selectedLocation?.latitude,
+            lng: selectedLocation?.longitude
+          }
+        },
+        deliveryAddress: typeof locationAddress === 'string' ? locationAddress : {
+          street: locationAddress?.street || 'Dirección',
+          city: locationAddress?.city || 'Ciudad',
+          state: locationAddress?.state || 'Estado',
+          zipCode: locationAddress?.zipCode || '00000',
+          coordinates: {
+            lat: selectedLocation?.latitude,
+            lng: selectedLocation?.longitude
+          }
+        },
+        notes: watchedValues.notes || '',
+        preferredDriver: null
       }
 
       const response = await appointmentService.createAppointment(appointmentData)
@@ -235,19 +282,22 @@ const NewAppointment = () => {
   }
 
   const calculateAppointmentCost = () => {
-    const servicePrices = {
-      verification: 500,
-      inspection: 800,
-      emissions: 300
+    if (selectedServices.length === 0) {
+      return {
+        basePrice: 0,
+        tax: 0,
+        total: 0
+      }
     }
     
-    const basePrice = servicePrices[watchedValues.serviceType] || 500
+    const basePrice = selectedServices.reduce((total, service) => total + service.basePrice, 0)
     const tax = basePrice * 0.16 // 16% IVA
     
     return {
       basePrice,
       tax,
-      total: basePrice + tax
+      total: basePrice + tax,
+      services: selectedServices
     }
   }
 
@@ -260,7 +310,7 @@ const NewAppointment = () => {
         scheduledDate: new Date(`${watchedValues.scheduledDate}T${watchedValues.scheduledTime}`),
         location: selectedLocation,
         carId: watchedValues.carId,
-        serviceType: watchedValues.serviceType,
+        services: selectedServices,
         notes: watchedValues.notes,
         pricing
       }
@@ -308,7 +358,7 @@ const NewAppointment = () => {
                 Programar nueva cita
               </h1>
               <p className="text-gray-600">
-                Paso {step} de 5
+                Paso {step} de 6
               </p>
             </div>
           </div>
@@ -319,7 +369,7 @@ const NewAppointment = () => {
       <div className="bg-white border-b">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center py-4">
-            {[1, 2, 3, 4, 5].map((stepNumber) => (
+            {[1, 2, 3, 4, 5, 6].map((stepNumber) => (
               <div key={stepNumber} className="flex items-center">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                   stepNumber < step ? 'bg-success-500 text-white' :
@@ -328,7 +378,7 @@ const NewAppointment = () => {
                 }`}>
                   {stepNumber < step ? <Check className="w-4 h-4" /> : stepNumber}
                 </div>
-                {stepNumber < 5 && (
+                {stepNumber < 6 && (
                   <div className={`w-16 h-1 mx-2 ${
                     stepNumber < step ? 'bg-success-500' : 'bg-gray-200'
                   }`} />
@@ -566,34 +616,61 @@ const NewAppointment = () => {
             </div>
           )}
 
-          {/* Step 4: Service Type and Notes */}
+          {/* Step 4: Service Selection */}
           {step === 4 && (
             <div className="bg-white rounded-xl shadow-soft p-8">
               <div className="text-center mb-8">
                 <Check className="w-12 h-12 text-primary-600 mx-auto mb-4" />
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                  Detalles del servicio
+                  Selecciona los servicios
                 </h2>
                 <p className="text-gray-600">
-                  Especifica el tipo de verificación y notas adicionales
+                  Elige los servicios automotrices que necesitas
+                </p>
+              </div>
+
+              <ServiceSelector
+                selectedServices={selectedServices}
+                onServiceChange={setSelectedServices}
+                showCategories={true}
+                required={true}
+                className="mb-6"
+              />
+
+              <div className="mt-8 flex justify-between">
+                <button
+                  type="button"
+                  onClick={prevStep}
+                  className="btn btn-secondary btn-md"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={selectedServices.length === 0}
+                  className="btn btn-primary btn-md disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Continuar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Notes */}
+          {step === 5 && (
+            <div className="bg-white rounded-xl shadow-soft p-8">
+              <div className="text-center mb-8">
+                <Check className="w-12 h-12 text-primary-600 mx-auto mb-4" />
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                  Notas adicionales
+                </h2>
+                <p className="text-gray-600">
+                  Agrega información adicional para el chofer
                 </p>
               </div>
 
               <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Tipo de servicio
-                  </label>
-                  <select
-                    className="input input-md w-full"
-                    {...register('serviceType')}
-                  >
-                    <option value="verification">Verificación vehicular</option>
-                    <option value="inspection">Inspección completa</option>
-                    <option value="emissions">Prueba de emisiones</option>
-                  </select>
-                </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Notas adicionales (opcional)
@@ -626,8 +703,8 @@ const NewAppointment = () => {
             </div>
           )}
 
-          {/* Step 5: Payment Method and Confirmation */}
-          {step === 5 && !showPaymentForm && (
+          {/* Step 6: Payment Method and Confirmation */}
+          {step === 6 && !showPaymentForm && (
             <div className="bg-white rounded-xl shadow-soft p-8">
               <div className="text-center mb-8">
                 <CreditCard className="w-12 h-12 text-primary-600 mx-auto mb-4" />
@@ -692,12 +769,20 @@ const NewAppointment = () => {
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Servicio:</span>
-                      <span className="font-medium">
-                        {watchedValues.serviceType === 'verification' ? 'Verificación vehicular' :
-                         watchedValues.serviceType === 'inspection' ? 'Inspección completa' :
-                         'Prueba de emisiones'}
-                      </span>
+                      <span className="text-gray-600">Servicios:</span>
+                      <div className="font-medium text-right max-w-xs">
+                        {selectedServices.length > 0 ? (
+                          <div className="space-y-1">
+                            {selectedServices.map((service, index) => (
+                              <div key={service._id} className="text-sm">
+                                {service.name} - ${service.basePrice}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400">No hay servicios seleccionados</span>
+                        )}
+                      </div>
                     </div>
                     <div className="flex justify-between border-t pt-3">
                       <span className="text-gray-600">Subtotal:</span>

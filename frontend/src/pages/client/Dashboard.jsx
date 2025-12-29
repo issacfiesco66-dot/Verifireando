@@ -14,14 +14,12 @@ import {
   XCircle
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 const Dashboard = () => {
   const { user } = useAuth()
-  const { onlineDrivers } = useSocket()
   const [appointments, setAppointments] = useState([])
   const [stats, setStats] = useState({
     total: 0,
@@ -118,10 +116,6 @@ const Dashboard = () => {
               </p>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                <div className="w-2 h-2 bg-success-500 rounded-full"></div>
-                <span>{onlineDrivers.length} choferes en línea</span>
-              </div>
               <Link
                 to="/client/appointments/new"
                 className="btn btn-primary btn-md flex items-center space-x-2"
@@ -317,12 +311,12 @@ const Dashboard = () => {
                 <div className="ml-3">
                   <h3 className="font-semibold">Perfil</h3>
                   <p className="text-primary-100 text-sm">
-                    {user?.emailVerified ? 'Verificado' : 'Pendiente verificación'}
+                    {user?.isVerified ? 'Verificado' : 'Pendiente verificación'}
                   </p>
                 </div>
               </div>
               
-              {!user?.emailVerified && (
+              {!user?.isVerified && (
                 <div className="bg-white bg-opacity-20 rounded-lg p-4 mb-4">
                   <p className="text-sm mb-2">
                     Verifica tu email para acceder a todas las funciones

@@ -1,25 +1,35 @@
 import axios from 'axios'
 import { toast } from 'react-hot-toast'
+import { auth } from '../firebase'
+
+const useFirebaseAuth = import.meta.env.VITE_USE_FIREBASE_AUTH === 'true'
 
 // Base API configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 
-// Create axios instances
+// Function to create API instance with interceptors
 const createAPIInstance = (baseURL = API_BASE_URL) => {
   const instance = axios.create({
     baseURL,
-    timeout: 30000,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    timeout: 10000,
   })
 
   // Request interceptor
   instance.interceptors.request.use(
-    (config) => {
-      const token = localStorage.getItem('token')
-      if (token) {
-        config.headers.Authorization = `Bearer ${token}`
+    async (config) => {
+      if (useFirebaseAuth) {
+        const user = auth.currentUser
+        if (user) {
+          const idToken = await user.getIdToken()
+          config.headers.Authorization = `Bearer ${idToken}`
+        } else {
+          delete config.headers.Authorization
+        }
+      } else {
+        const token = localStorage.getItem('token')
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`
+        }
       }
       return config
     },
@@ -34,13 +44,11 @@ const createAPIInstance = (baseURL = API_BASE_URL) => {
       return response
     },
     (error) => {
-      // Handle common errors
       if (error.response) {
         const { status, data } = error.response
         
         switch (status) {
           case 401:
-            // Unauthorized - clear token and redirect to login
             localStorage.removeItem('token')
             if (window.location.pathname !== '/auth/login') {
               window.location.href = '/auth/login'
@@ -53,7 +61,6 @@ const createAPIInstance = (baseURL = API_BASE_URL) => {
             toast.error('Recurso no encontrado')
             break
           case 422:
-            // Validation errors
             if (data.errors && Array.isArray(data.errors)) {
               data.errors.forEach(err => toast.error(err.message))
             } else if (data.message) {
@@ -74,10 +81,8 @@ const createAPIInstance = (baseURL = API_BASE_URL) => {
             }
         }
       } else if (error.request) {
-        // Network error
         toast.error('Error de conexión. Verifica tu internet.')
       } else {
-        // Other error
         toast.error('Error inesperado')
       }
       
@@ -98,30 +103,33 @@ export const driverAPI = createAPIInstance(`${API_BASE_URL}/drivers`)
 export const carAPI = createAPIInstance(`${API_BASE_URL}/cars`)
 export const appointmentAPI = createAPIInstance(`${API_BASE_URL}/appointments`)
 export const paymentAPI = createAPIInstance(`${API_BASE_URL}/payments`)
+export const publicPaymentAPI = createAPIInstance(`${API_BASE_URL}/public-payments`)
 export const notificationAPI = createAPIInstance(`${API_BASE_URL}/notifications`)
+export const serviceAPI = createAPIInstance(`${API_BASE_URL}/services`)
 
 // File upload API (with different content type)
 export const uploadAPI = createAPIInstance()
 uploadAPI.defaults.headers['Content-Type'] = 'multipart/form-data'
 
-// Auth service
-export const authService = {
-  login: (credentials) => authAPI.post('/login', credentials),
-  register: (userData) => authAPI.post('/register', userData),
-  logout: () => authAPI.post('/logout'),
-  refreshToken: () => authAPI.post('/refresh-token'),
-  forgotPassword: (email) => authAPI.post('/forgot-password', { email }),
-  resetPassword: (token, password) => authAPI.post('/reset-password', { token, password }),
-  verifyEmail: (token) => authAPI.post('/verify-email', { token }),
-  resendVerification: () => authAPI.post('/resend-verification'),
-  getProfile: () => authAPI.get('/me'),
-  updateProfile: (data) => authAPI.put('/profile', data),
-  changePassword: (data) => authAPI.put('/change-password', data),
-  uploadAvatar: (file) => {
-    const formData = new FormData()
-    formData.append('avatar', file)
-    return uploadAPI.post('/auth/avatar', formData)
-  },
+// Public Payment service (sin autenticación)
+export const publicPaymentService = {
+  getMyPayments: () => publicPaymentAPI.get('/my-payments'),
+  getPaymentMethods: () => publicPaymentAPI.get('/methods'),
+}
+
+// Payment service
+export const paymentService = {
+  getPayments: (params) => paymentAPI.get('/', { params }),
+  getPayment: (id) => paymentAPI.get(`/${id}`),
+  getMyPayments: () => paymentAPI.get('/my-payments'),
+  createPaymentIntent: (data) => paymentAPI.post('/create-intent', data),
+  confirmPayment: (id, data) => paymentAPI.post(`/${id}/confirm`, data),
+  refundPayment: (id, data) => paymentAPI.post(`/${id}/refund`, data),
+  getPaymentStats: (params) => paymentAPI.get('/stats', { params }),
+  getPaymentMethods: () => paymentAPI.get('/methods'),
+  addPaymentMethod: (data) => paymentAPI.post('/methods', data),
+  deletePaymentMethod: (id) => paymentAPI.delete(`/methods/${id}`),
+  setDefaultPaymentMethod: (id) => paymentAPI.put(`/methods/${id}/default`),
 }
 
 // User service
@@ -133,6 +141,31 @@ export const userService = {
   activateUser: (id) => userAPI.put(`/${id}/activate`),
   deactivateUser: (id) => userAPI.put(`/${id}/deactivate`),
   getUserStats: () => userAPI.get('/stats'),
+  getSettings: () => userAPI.get('/settings'),
+  updateSettings: (settings) => userAPI.put('/settings', { settings }),
+  updateProfile: (data) => authAPI.put('/profile', data),
+  updateNotificationPreferences: (data) => authAPI.put('/profile', { preferences: data }),
+  resendVerificationEmail: () => authAPI.post('/resend-otp'),
+}
+
+// Auth service
+export const authService = {
+  login: (credentials) => authAPI.post('/login', credentials),
+  register: (userData) => authAPI.post('/register', userData),
+  logout: () => authAPI.post('/logout'),
+  refreshToken: () => authAPI.post('/refresh-token'),
+  forgotPassword: (email) => authAPI.post('/forgot-password', { email }),
+  resetPassword: (token, password) => authAPI.post('/reset-password', { token, password }),
+  verifyEmail: (token) => authAPI.post('/verify-email', { token }),
+  resendVerification: () => authAPI.post('/resend-otp'),
+  getProfile: () => authAPI.get('/me'),
+  updateProfile: (data) => authAPI.put('/profile', data),
+  changePassword: (data) => authAPI.put('/change-password', data),
+  uploadAvatar: (file) => {
+    const formData = new FormData()
+    formData.append('avatar', file)
+    return uploadAPI.post('/auth/avatar', formData)
+  },
 }
 
 // Driver service
@@ -146,6 +179,9 @@ export const driverService = {
   updateLocation: (location) => driverAPI.put('/location', location),
   getAvailableDrivers: (params) => driverAPI.get('/available', { params }),
   getDriverStats: (id) => driverAPI.get(`/${id}/stats`),
+  getStats: () => driverAPI.get('/stats'),
+  getVehicle: () => driverAPI.get('/vehicle'),
+  updateVehicle: (data) => driverAPI.put('/vehicle', data),
   uploadDocuments: (id, files) => {
     const formData = new FormData()
     Object.keys(files).forEach(key => {
@@ -159,6 +195,8 @@ export const driverService = {
 export const carService = {
   getCars: (params) => carAPI.get('/', { params }),
   getCar: (id) => carAPI.get(`/${id}`),
+  getCarById: (id) => carAPI.get(`/${id}`), 
+  getMyCars: () => carAPI.get('/my-cars'), 
   createCar: (data) => carAPI.post('/', data),
   updateCar: (id, data) => carAPI.put(`/${id}`, data),
   deleteCar: (id) => carAPI.delete(`/${id}`),
@@ -174,25 +212,17 @@ export const carService = {
 export const appointmentService = {
   getAppointments: (params) => appointmentAPI.get('/', { params }),
   getAppointment: (id) => appointmentAPI.get(`/${id}`),
+  getMyAppointments: () => appointmentAPI.get('/my-appointments'),
+  getDriverAppointments: () => appointmentAPI.get('/my-appointments'),
   createAppointment: (data) => appointmentAPI.post('/', data),
   updateAppointment: (id, data) => appointmentAPI.put(`/${id}`, data),
   updateStatus: (id, status, data) => appointmentAPI.put(`/${id}/status`, { status, ...data }),
   assignDriver: (id, driverId) => appointmentAPI.put(`/${id}/assign-driver`, { driverId }),
   cancelAppointment: (id, reason) => appointmentAPI.put(`/${id}/cancel`, { reason }),
   rateAppointment: (id, rating, comment) => appointmentAPI.post(`/${id}/rate`, { rating, comment }),
-  getAvailableAppointments: (params) => appointmentAPI.get('/available', { params }),
+  getAvailableAppointments: (params) => appointmentAPI.get('/driver/available', { params }),
   acceptAppointment: (id) => appointmentAPI.put(`/${id}/accept`),
   getAppointmentStats: () => appointmentAPI.get('/stats'),
-}
-
-// Payment service
-export const paymentService = {
-  getPayments: (params) => paymentAPI.get('/', { params }),
-  getPayment: (id) => paymentAPI.get(`/${id}`),
-  createPaymentIntent: (data) => paymentAPI.post('/create-intent', data),
-  confirmPayment: (id, data) => paymentAPI.post(`/${id}/confirm`, data),
-  refundPayment: (id, data) => paymentAPI.post(`/${id}/refund`, data),
-  getPaymentStats: (params) => paymentAPI.get('/stats', { params }),
 }
 
 // Notification service
@@ -206,6 +236,16 @@ export const notificationService = {
   sendNotification: (data) => notificationAPI.post('/send', data),
   getNotificationStats: () => notificationAPI.get('/admin/stats'),
   sendTestNotification: (data) => notificationAPI.post('/admin/test', data),
+}
+
+// Service management
+export const serviceService = {
+  getAllServices: (params = {}) => serviceAPI.get('/', { params }),
+  getService: (id) => serviceAPI.get(`/${id}`),
+  getCategories: () => serviceAPI.get('/categories/list'),
+  createService: (data) => serviceAPI.post('/', data),
+  updateService: (id, data) => serviceAPI.put(`/${id}`, data),
+  deleteService: (id) => serviceAPI.delete(`/${id}`),
 }
 
 // Admin service for admin-specific operations
@@ -279,5 +319,4 @@ export const createFormData = (data) => {
   return formData
 }
 
-// Export default API instance
 export default api

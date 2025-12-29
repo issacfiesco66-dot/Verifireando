@@ -311,7 +311,7 @@ const Profile = () => {
                 </div>
 
                 {/* Email Verification Status */}
-                {!user?.emailVerified && (
+                {!user?.isVerified && (
                   <div className="bg-warning-50 border border-warning-200 rounded-lg p-4">
                     <div className="flex items-start space-x-3">
                       <AlertCircle className="w-5 h-5 text-warning-600 mt-0.5" />
@@ -339,11 +339,13 @@ const Profile = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Name */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="client-name" className="block text-sm font-medium text-gray-700 mb-2">
                         Nombre completo *
                       </label>
                       <input
+                        id="client-name"
                         type="text"
+                        autoComplete="name"
                         className={`input input-md w-full ${errorsPersonal.name ? 'border-error-500' : ''}`}
                         {...registerPersonal('name', {
                           required: 'El nombre es requerido',
@@ -360,11 +362,13 @@ const Profile = () => {
 
                     {/* Email */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="client-email" className="block text-sm font-medium text-gray-700 mb-2">
                         Email *
                       </label>
                       <input
+                        id="client-email"
                         type="email"
+                        autoComplete="email"
                         className={`input input-md w-full ${errorsPersonal.email ? 'border-error-500' : ''}`}
                         {...registerPersonal('email', {
                           required: 'El email es requerido',
@@ -381,11 +385,13 @@ const Profile = () => {
 
                     {/* Phone */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="client-phone" className="block text-sm font-medium text-gray-700 mb-2">
                         Teléfono
                       </label>
                       <input
+                        id="client-phone"
                         type="tel"
+                        autoComplete="tel"
                         className="input input-md w-full"
                         {...registerPersonal('phone')}
                       />
@@ -393,11 +399,13 @@ const Profile = () => {
 
                     {/* Address */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="client-address" className="block text-sm font-medium text-gray-700 mb-2">
                         Dirección
                       </label>
                       <input
+                        id="client-address"
                         type="text"
+                        autoComplete="street-address"
                         className="input input-md w-full"
                         {...registerPersonal('address')}
                       />
@@ -438,12 +446,14 @@ const Profile = () => {
                   <form onSubmit={handleSubmitPassword(onSubmitPassword)} className="space-y-6">
                     {/* Current Password */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="client-current-password" className="block text-sm font-medium text-gray-700 mb-2">
                         Contraseña actual *
                       </label>
                       <div className="relative">
                         <input
+                          id="client-current-password"
                           type={showCurrentPassword ? 'text' : 'password'}
+                          autoComplete="current-password"
                           className={`input input-md w-full pr-10 ${errorsPassword.currentPassword ? 'border-error-500' : ''}`}
                           {...registerPassword('currentPassword', {
                             required: 'La contraseña actual es requerida'
@@ -468,12 +478,14 @@ const Profile = () => {
 
                     {/* New Password */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="client-new-password" className="block text-sm font-medium text-gray-700 mb-2">
                         Nueva contraseña *
                       </label>
                       <div className="relative">
                         <input
+                          id="client-new-password"
                           type={showNewPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
                           className={`input input-md w-full pr-10 ${errorsPassword.newPassword ? 'border-error-500' : ''}`}
                           {...registerPassword('newPassword', {
                             required: 'La nueva contraseña es requerida',
@@ -506,12 +518,14 @@ const Profile = () => {
 
                     {/* Confirm Password */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                      <label htmlFor="client-confirm-password" className="block text-sm font-medium text-gray-700 mb-2">
                         Confirmar nueva contraseña *
                       </label>
                       <div className="relative">
                         <input
+                          id="client-confirm-password"
                           type={showConfirmPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
                           className={`input input-md w-full pr-10 ${errorsPassword.confirmPassword ? 'border-error-500' : ''}`}
                           {...registerPassword('confirmPassword', {
                             required: 'Confirma tu nueva contraseña',

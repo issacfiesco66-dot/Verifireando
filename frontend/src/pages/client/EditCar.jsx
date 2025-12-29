@@ -528,7 +528,7 @@ const EditCar = () => {
 
                 {/* New Document Upload */}
                 {!documents.registration ? (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
+                  <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
                     <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-600 mb-2">
                       {existingDocuments.registration ? 'Subir nuevo documento' : 'Haz clic para subir o arrastra el archivo aquí'}
@@ -628,7 +628,7 @@ const EditCar = () => {
 
                 {/* New Document Upload */}
                 {!documents.insurance ? (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
+                  <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
                     <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-600 mb-2">
                       {existingDocuments.insurance ? 'Subir nuevo documento' : 'Haz clic para subir o arrastra el archivo aquí'}

@@ -15,15 +15,14 @@ import {
   Route
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useSocket } from '../../contexts/SocketContext'
 import { useLocation } from '../../contexts/LocationContext'
 import { appointmentService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import NotificationPanel from '../../components/driver/NotificationPanel'
 import toast from 'react-hot-toast'
 
 const Dashboard = () => {
   const { user } = useAuth()
-  const { socket, emitEvent } = useSocket()
   const { currentLocation, requestLocationPermission } = useLocation()
   const [appointments, setAppointments] = useState([])
   const [stats, setStats] = useState({
@@ -51,32 +50,25 @@ const Dashboard = () => {
       setLoading(true)
       const response = await appointmentService.getDriverAppointments()
       const appointmentsData = response.data.appointments || []
-      
-      setAppointments(appointmentsData.slice(0, 5)) // Show only recent 5
+      setAppointments(appointmentsData)
       
       // Calculate stats
-      const today = new Date().toDateString()
-      const stats = appointmentsData.reduce((acc, appointment) => {
-        const appointmentDate = new Date(appointment.scheduledDate).toDateString()
-        
-        if (appointmentDate === today) {
-          acc.today++
-        }
-        
-        if (appointment.status === 'pending') {
-          acc.pending++
-        }
-        
-        if (appointment.status === 'completed') {
-          acc.completed++
-          acc.earnings += appointment.payment?.amount || 0
-        }
-        
-        return acc
-      }, { today: 0, pending: 0, completed: 0, earnings: 0 })
+      const today = new Date()
+      const stats = {
+        today: appointmentsData.filter(apt => {
+          const aptDate = new Date(apt.scheduledDate)
+          return aptDate.toDateString() === today.toDateString()
+        }).length,
+        pending: appointmentsData.filter(apt => apt.status === 'assigned' || apt.status === 'driver_enroute').length,
+        completed: appointmentsData.filter(apt => apt.status === 'completed').length,
+        earnings: appointmentsData
+          .filter(apt => apt.status === 'completed')
+          .reduce((total, apt) => total + (apt.totalPrice || 0), 0)
+      }
       
       setStats(stats)
     } catch (error) {
+      console.error('❌ Error fetching appointments:', error)
       toast.error('Error al cargar las citas')
     } finally {
       setLoading(false)
@@ -104,15 +96,8 @@ const Dashboard = () => {
       localStorage.setItem('driverOnlineStatus', newStatus.toString())
 
       if (newStatus) {
-        emitEvent('driver-online', {
-          driverId: user._id,
-          location: currentLocation
-        })
         toast.success('Ahora estás en línea')
       } else {
-        emitEvent('driver-offline', {
-          driverId: user._id
-        })
         toast.success('Ahora estás fuera de línea')
       }
     } catch (error) {
@@ -121,12 +106,7 @@ const Dashboard = () => {
   }
 
   const updateDriverLocation = () => {
-    if (socket && currentLocation) {
-      emitEvent('update-driver-location', {
-        driverId: user._id,
-        location: currentLocation
-      })
-    }
+    // Socket.IO removed - location updates disabled
   }
 
   const getStatusIcon = (status) => {
@@ -173,7 +153,6 @@ const Dashboard = () => {
   if (loading) {
     return <LoadingSpinner fullScreen text="Cargando dashboard..." />
   }
-
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -364,6 +343,9 @@ const Dashboard = () => {
 
           {/* Quick Actions */}
           <div className="space-y-6">
+            {/* Notification Panel */}
+            <NotificationPanel />
+            
             {/* Status Card */}
             <div className={`rounded-xl shadow-soft p-6 ${isOnline ? 'bg-gradient-to-r from-success-500 to-success-600' : 'bg-gradient-to-r from-gray-500 to-gray-600'} text-white`}>
               <div className="flex items-center mb-4">
@@ -393,7 +375,7 @@ const Dashboard = () => {
               </button>
             </div>
 
-            {/* Quick Actions */}
+            {/* Quick Actions Section */}
             <div className="bg-white rounded-xl shadow-soft p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-4">
                 Acciones rápidas

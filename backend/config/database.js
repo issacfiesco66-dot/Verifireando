@@ -3,10 +3,15 @@ const logger = require('../utils/logger');
 
 const connectDB = async () => {
   try {
-    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/verifireando';
+    // SOLO MongoDB Atlas - Sin fallback a localhost
+    const mongoURI = process.env.MONGODB_URI || process.env.MONGO_URI;
+    
+    if (!mongoURI) {
+      throw new Error('MONGODB_URI no está configurada. Configura la variable de entorno con tu connection string de Atlas.');
+    }
     
     const options = {
-      serverSelectionTimeoutMS: 5000, // Timeout para selección de servidor
+      serverSelectionTimeoutMS: 10000, // Timeout para selección de servidor
       socketTimeoutMS: 45000, // Timeout para operaciones de socket
       maxPoolSize: 10, // Máximo de conexiones en el pool
       minPoolSize: 5, // Mínimo de conexiones en el pool
@@ -16,35 +21,47 @@ const connectDB = async () => {
     
     const conn = await mongoose.connect(mongoURI, options);
 
-    logger.info(`MongoDB Connected: ${conn.connection.host}`);
+    logger.info(`MongoDB Atlas Connected: ${conn.connection.host}`);
+    console.log(`✅ MongoDB Atlas Connected: ${conn.connection.host}`);
     
     // Configurar eventos de conexión
     mongoose.connection.on('error', (err) => {
-      logger.error('MongoDB connection error:', err);
+      logger.error('MongoDB Atlas connection error:', err);
+      console.error('MongoDB Atlas connection error:', err);
     });
     
     mongoose.connection.on('disconnected', () => {
-      logger.warn('MongoDB disconnected');
+      logger.warn('MongoDB Atlas disconnected');
+      console.warn('MongoDB Atlas disconnected');
     });
     
     mongoose.connection.on('reconnected', () => {
-      logger.info('MongoDB reconnected');
+      logger.info('MongoDB Atlas reconnected');
+      console.log('MongoDB Atlas reconnected');
     });
     
     return conn;
   } catch (error) {
-    logger.error('Error connecting to MongoDB:', error.message);
-    logger.info('Starting without database connection for development...');
-    return null;
+    logger.error('Error connecting to MongoDB Atlas:', error.message);
+    console.error('❌ Error connecting to MongoDB Atlas:', error.message);
+    console.error('Asegúrate de que MONGODB_URI esté configurada correctamente en .env');
+    throw error; // No fallback - forzar conexión a Atlas
   }
 };
 
 const disconnectDB = async () => {
   try {
     await mongoose.connection.close();
-    logger.info('MongoDB connection closed');
+    logger.info('MongoDB Atlas connection closed');
+    console.log('MongoDB Atlas connection closed');
+    if (process.env.LOG_TO_CONSOLE === 'true') {
+      console.log('MongoDB connection closed');
+    }
   } catch (error) {
     logger.error('Error closing MongoDB connection:', error.message);
+    if (process.env.LOG_TO_CONSOLE === 'true') {
+      console.error('Error closing MongoDB connection:', error);
+    }
   }
 };
 

@@ -24,14 +24,12 @@ import {
   Clock
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useSocket } from '../../contexts/SocketContext'
 import { adminService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 const Drivers = () => {
   const { user } = useAuth()
-  const { onlineDrivers } = useSocket()
   const [drivers, setDrivers] = useState([])
   const [filteredDrivers, setFilteredDrivers] = useState([])
   const [loading, setLoading] = useState(true)

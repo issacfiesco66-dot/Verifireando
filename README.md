@@ -1,62 +1,45 @@
 # 🚗 Verifireando
 
-**Plataforma de verificación vehicular** - Sistema completo con backend API y frontend PWA para gestionar citas de verificación vehicular.
+**Sistema de verificación vehicular a domicilio**
+
+Plataforma web que conecta usuarios con conductores certificados para realizar verificaciones vehiculares a domicilio.
+
+---
 
 ## 📋 Características
 
-- 🔐 **Autenticación completa** - Login, registro, recuperación de contraseña
-- 👥 **Múltiples roles** - Cliente, Conductor, Administrador
-- 📱 **PWA (Progressive Web App)** - Funciona como app móvil
-- 🔔 **Notificaciones push** - Firebase Cloud Messaging
-- 💳 **Pagos integrados** - Stripe y MercadoPago
-- 📍 **Geolocalización** - Mapbox para ubicaciones
-- 📊 **Dashboard administrativo** - Gestión completa del sistema
-- 🚗 **Gestión de vehículos** - CRUD completo de autos
-- 📅 **Sistema de citas** - Programación y seguimiento
-- 💬 **Chat en tiempo real** - Socket.IO
-- 📧 **Notificaciones por email** - Nodemailer
-- 📱 **WhatsApp Business API** - Notificaciones por WhatsApp
+- ✅ Solicitud de citas de verificación vehicular
+- 📍 Geolocalización con Mapbox
+- 💳 Pagos integrados con Stripe
+- 🔐 Autenticación JWT + Firebase
+- 📱 PWA con notificaciones push
+- 👥 Roles: Cliente, Conductor, Admin
+- 🗺️ Tracking en tiempo real (próximamente)
 
-## 🏗️ Arquitectura
+---
 
-```
-verifireando/
-├── backend/          # API REST con Node.js + Express
-├── frontend/         # PWA con React + Vite
-├── DEPLOYMENT.md     # Guía de deployment
-└── build-production.js # Script de build automático
-```
+## 🛠️ Stack Tecnológico
 
-## 🚀 Inicio Rápido
+### Frontend
+- **Framework:** React 18 + Vite
+- **Estilos:** TailwindCSS
+- **Routing:** React Router v6
+- **Mapas:** Mapbox GL JS
+- **Auth:** Firebase Authentication
+- **HTTP:** Axios
+- **Estado:** Context API
+- **PWA:** Workbox
 
-### Prerrequisitos
+### Backend
+- **Runtime:** Node.js 18+
+- **Framework:** Express.js
+- **Base de datos:** MongoDB + Mongoose
+- **Autenticación:** JWT
+- **Pagos:** Stripe
+- **Logging:** Winston
+- **Process Manager:** PM2
 
-- Node.js 16+ 
-- npm 8+
-- MongoDB (local o Atlas)
-- Firebase project (para storage y push notifications)
-
-### Instalación
-
-```bash
-# Clonar el repositorio
-git clone https://github.com/tu-usuario/verifireando.git
-cd verifireando
-
-# Instalar dependencias de ambos proyectos
-npm run install:all
-
-# Configurar variables de entorno
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env
-
-# Editar los archivos .env con tus credenciales
-
-# Sembrar la base de datos (opcional)
-npm run seed
-
-# Iniciar en modo desarrollo
-npm run dev
+---
 ```
 
 ### URLs de desarrollo

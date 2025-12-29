@@ -23,14 +23,12 @@ import {
   FileText
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { useSocket } from '../../contexts/SocketContext'
 import { adminService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 const Appointments = () => {
   const { user } = useAuth()
-  const { socket } = useSocket()
   const [appointments, setAppointments] = useState([])
   const [filteredAppointments, setFilteredAppointments] = useState([])
   const [loading, setLoading] = useState(true)

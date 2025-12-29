@@ -116,24 +116,30 @@ const NewCar = () => {
     try {
       setSubmitting(true)
 
-      // Create FormData for file upload
-      const formData = new FormData()
-      
-      // Add car data
-      Object.keys(data).forEach(key => {
-        formData.append(key, data[key])
-      })
+      // Map form fields to backend schema and send JSON
+      const normalizedPlates = String(data.licensePlate || '')
+        .replace(/[^A-Za-z0-9]/g, '')
+        .toUpperCase()
 
-      // Add documents
-      if (documents.registration) {
-        formData.append('registration', documents.registration)
-      }
-      if (documents.insurance) {
-        formData.append('insurance', documents.insurance)
+      const allowedEngineTypes = ['gasoline', 'diesel', 'electric', 'hybrid']
+      const engineType = allowedEngineTypes.includes(data.fuelType)
+        ? data.fuelType
+        : 'gasoline'
+
+      const payload = {
+        plates: normalizedPlates,
+        brand: data.make,
+        model: data.model,
+        year: Number(data.year),
+        color: data.color,
+        engineType,
+        metadata: {
+          vin: data.vin || undefined
+        }
       }
 
-      const response = await carService.createCar(formData)
-      
+      const response = await carService.createCar(payload)
+
       toast.success('Vehículo registrado exitosamente')
       navigate('/client/cars')
     } catch (error) {
@@ -232,14 +238,14 @@ const NewCar = () => {
                 </label>
                 <input
                   type="number"
-                  min="1900"
+                  min="1990"
                   max={getCurrentYear() + 1}
                   className={`input input-md w-full ${errors.year ? 'border-error-500' : ''}`}
                   {...register('year', {
                     required: 'El año es requerido',
                     min: {
-                      value: 1900,
-                      message: 'El año debe ser mayor a 1900'
+                      value: 1990,
+                      message: 'El año debe ser 1990 o mayor'
                     },
                     max: {
                       value: getCurrentYear() + 1,
@@ -413,7 +419,7 @@ const NewCar = () => {
                 </label>
                 
                 {!documents.registration ? (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
+                  <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
                     <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-600 mb-2">
                       Haz clic para subir o arrastra el archivo aquí
@@ -473,7 +479,7 @@ const NewCar = () => {
                 </label>
                 
                 {!documents.insurance ? (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
+                  <div className="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary-400 transition-colors">
                     <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-600 mb-2">
                       Haz clic para subir o arrastra el archivo aquí

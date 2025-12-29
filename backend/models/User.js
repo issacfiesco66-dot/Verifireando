@@ -27,8 +27,31 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['client', 'admin'],
+    enum: ['client', 'driver', 'admin'],
     default: 'client'
+  },
+  driverProfile: {
+    licenseNumber: String,
+    licenseExpiry: Date,
+    licenseDocument: String,
+    isVerifiedDriver: { type: Boolean, default: false },
+    vehicleInfo: {
+      brand: String,
+      model: String,
+      year: Number,
+      plates: String,
+      color: String,
+      photos: [String]
+    },
+    rating: { type: Number, default: 0 },
+    totalTrips: { type: Number, default: 0 },
+    isOnline: { type: Boolean, default: false },
+    isAvailable: { type: Boolean, default: false },
+    currentLocation: {
+      lat: Number,
+      lng: Number,
+      lastUpdate: Date
+    }
   },
   isVerified: {
     type: Boolean,
@@ -79,19 +102,32 @@ const userSchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  authProvider: {
+    type: String,
+    enum: ['local', 'google'],
+    default: 'local'
+  },
+  photoURL: {
+    type: String,
+    default: null
+  },
+  lastLogin: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true
 });
 
 // Índices
-userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 });
 userSchema.index({ 'address.coordinates': '2dsphere' });
 
 // Middleware para hashear contraseña antes de guardar
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+  // No hashear si es usuario de Google o si la contraseña no ha sido modificada
+  if (this.authProvider === 'google' || !this.isModified('password')) return next();
   
   try {
     const salt = await bcrypt.genSalt(12);
