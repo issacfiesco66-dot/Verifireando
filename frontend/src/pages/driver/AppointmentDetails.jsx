@@ -22,6 +22,7 @@ import {
   MessageSquare
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import MapComponent from '../../components/map/MapComponent'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -31,6 +32,7 @@ const AppointmentDetails = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { socket } = useSocket()
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [appointment, setAppointment] = useState(null)

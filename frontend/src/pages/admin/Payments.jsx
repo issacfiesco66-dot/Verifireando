@@ -24,12 +24,14 @@ import {
   PieChart
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSocket } from '../../contexts/SocketContext'
 import { adminService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
 const Payments = () => {
   const { user } = useAuth()
+  const { socket } = useSocket()
   const [payments, setPayments] = useState([])
   const [filteredPayments, setFilteredPayments] = useState([])
   const [loading, setLoading] = useState(true)

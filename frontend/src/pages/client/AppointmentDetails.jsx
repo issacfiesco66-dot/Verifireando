@@ -22,6 +22,7 @@ import {
   Send
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import MapComponent from '../../components/map/MapComponent'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -30,6 +31,7 @@ import toast from 'react-hot-toast'
 const AppointmentDetails = () => {
   const { id } = useParams()
   const { user } = useAuth()
+  const { socket } = useSocket()
   const navigate = useNavigate()
   
   const [appointment, setAppointment] = useState(null)
