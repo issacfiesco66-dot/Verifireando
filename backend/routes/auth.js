@@ -110,20 +110,12 @@ router.post('/register', async (req, res) => {
 
     logger.info(`Usuario registrado: ${email} (${role}) - Código: ${verificationCode}`);
 
-    // En desarrollo, devolver el código en la respuesta
-    if (process.env.NODE_ENV === 'development') {
-      return res.status(201).json({
-        message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp.',
-        userId: user._id,
-        needsVerification: true,
-        devCode: verificationCode // Solo en desarrollo
-      });
-    }
-
+    // Devolver el código en la respuesta (TODO: quitar devCode en producción real)
     res.status(201).json({
       message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp.',
       userId: user._id,
-      needsVerification: true
+      needsVerification: true,
+      devCode: verificationCode
     });
 
   } catch (error) {
@@ -188,20 +180,12 @@ router.post('/login', async (req, res) => {
       
       logger.info(`Código OTP generado para ${email}: ${verificationCode}`);
       
-      // En entorno de desarrollo, devolver el código en la respuesta para facilitar pruebas
-      if (process.env.NODE_ENV === 'development') {
-        return res.status(403).json({ 
-          message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
-          needsVerification: true,
-          userId: user._id,
-          devCode: verificationCode // SOLO EN DESARROLLO
-        });
-      }
-
+      // Devolver el código en la respuesta (TODO: quitar devCode en producción real)
       return res.status(403).json({ 
         message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
         needsVerification: true,
-        userId: user._id
+        userId: user._id,
+        devCode: verificationCode
       });
     }
 
