@@ -9,6 +9,7 @@ import './index.css'
 import { AuthProvider } from './contexts/AuthContext'
 import { NotificationProvider } from './contexts/NotificationContext'
 import { LocationProvider } from './contexts/LocationContext'
+import { SocketProvider } from './contexts/SocketContext'
 
 // Error boundary
 import ErrorBoundary from './components/common/ErrorBoundary'
@@ -33,7 +34,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <AuthProvider>
           <NotificationProvider>
             <LocationProvider>
-              <App />
+              <SocketProvider>
+                <App />
                 <Toaster
                   position="top-right"
                   toastOptions={{
@@ -58,6 +60,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     },
                   }}
                 />
+              </SocketProvider>
             </LocationProvider>
           </NotificationProvider>
         </AuthProvider>
