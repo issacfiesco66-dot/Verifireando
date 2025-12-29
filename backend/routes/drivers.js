@@ -1,6 +1,7 @@
 const express = require('express');
 const Joi = require('joi');
 const Driver = require('../models/Driver');
+const User = require('../models/User');
 const Appointment = require('../models/Appointment');
 const { auth, authorize } = require('../middleware/auth');
 const { mockDrivers } = require('../config/mockDatabase');
@@ -111,7 +112,12 @@ router.get('/', async (req, res) => {
 // Obtener estadísticas del chofer actual (autenticado)
 router.get('/stats', auth, authorize(['driver']), async (req, res) => {
   try {
-    const driver = await Driver.findById(req.userId);
+    // Buscar en User primero (modelo principal), luego en Driver (compatibilidad)
+    let driver = await User.findById(req.userId);
+    if (!driver || driver.role !== 'driver') {
+      driver = await Driver.findById(req.userId);
+    }
+    
     if (!driver) {
       return res.status(404).json({ message: 'Chofer no encontrado' });
     }
