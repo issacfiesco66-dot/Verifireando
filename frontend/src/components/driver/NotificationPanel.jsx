@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { useLocation } from '../../contexts/LocationContext'
 import { useAuth } from '../../contexts/AuthContext'
+import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import toast from 'react-hot-toast'
 
@@ -25,24 +26,25 @@ const NotificationPanel = ({ className = "" }) => {
   
   const { user } = useAuth()
   const { currentLocation, calculateDistance } = useLocation()
+  const { isConnected, on, off } = useSocket()
 
   useEffect(() => {
-    if (!connected || user?.role !== 'driver') return
+    if (!isConnected || user?.role !== 'driver') return
 
     // Subscribe to appointment events
-    const unsubscribeAppointmentCreated = subscribe('appointment-created', handleNewAppointment)
-    const unsubscribeAppointmentUpdated = subscribe('appointment-updated', handleAppointmentUpdate)
-    const unsubscribeAppointmentAssigned = subscribe('appointment-assigned', handleAppointmentAssigned)
+    on('appointment-created', handleNewAppointment)
+    on('appointment-updated', handleAppointmentUpdate)
+    on('appointment-assigned', handleAppointmentAssigned)
 
     // Fetch initial available appointments
     fetchAvailableAppointments()
 
     return () => {
-      unsubscribeAppointmentCreated()
-      unsubscribeAppointmentUpdated()
-      unsubscribeAppointmentAssigned()
+      off('appointment-created', handleNewAppointment)
+      off('appointment-updated', handleAppointmentUpdate)
+      off('appointment-assigned', handleAppointmentAssigned)
     }
-  }, [connected, user])
+  }, [isConnected, user, on, off])
 
   const fetchAvailableAppointments = async () => {
     try {
