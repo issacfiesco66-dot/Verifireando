@@ -1,14 +1,25 @@
 import React, { useEffect, useContext } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { NotificationContext } from '../../contexts/NotificationContext'
+import { useSocket } from '../../contexts/SocketContext'
 import toast from 'react-hot-toast'
 
 const NotificationHandler = () => {
   const { user } = useAuth()
+  const { socket, on, off } = useSocket()
   const notificationContext = useContext(NotificationContext)
   
   // Safely get showBrowserNotification function
   const showBrowserNotification = notificationContext?.showBrowserNotification || (() => {})
+
+  // Helper function to subscribe to socket events
+  const subscribe = (event, handler) => {
+    if (socket) {
+      on(event, handler)
+      return () => off(event, handler)
+    }
+    return () => {}
+  }
 
   useEffect(() => {
     if (!socket || !user) return
