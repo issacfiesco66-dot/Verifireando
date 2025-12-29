@@ -60,7 +60,7 @@ const Register = () => {
       await registerUser(registrationData)
       
       // Redirect to email verification
-      navigate('/auth/verify-email', { replace: true, state: { email: data.email } })
+      navigate('/auth/verify-email', { replace: true, state: { email: data.email, role: data.role } })
     } catch (error) {
       setJustRegistered(false) // Reset on error
       // Error is handled by AuthContext
