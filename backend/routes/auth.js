@@ -13,7 +13,10 @@ const registerSchema = Joi.object({
   email: Joi.string().email().required(),
   phone: Joi.string().pattern(/^(\+52)?[0-9]{10}$/).required(),
   password: Joi.string().min(6).required(),
-  role: Joi.string().valid('client', 'driver').default('client')
+  role: Joi.string().valid('client', 'driver').default('client'),
+  // Campos opcionales para conductores
+  licenseNumber: Joi.string().optional(),
+  licenseExpiry: Joi.date().optional()
 });
 
 const loginSchema = Joi.object({
@@ -66,7 +69,7 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    const { name, email, phone, password, role } = value;
+    const { name, email, phone, password, role, licenseNumber, licenseExpiry } = value;
 
     // Verificar si el usuario ya existe (buscar en User solamente)
     const existingUser = await User.findOne({ 
@@ -87,6 +90,14 @@ router.post('/register', async (req, res) => {
       password,
       role: role || 'client'
     };
+
+    // Agregar campos de conductor si aplica
+    if (role === 'driver' && licenseNumber) {
+      userData.driverProfile = {
+        licenseNumber: licenseNumber,
+        licenseExpiry: licenseExpiry
+      };
+    }
 
     const user = new User(userData);
     
