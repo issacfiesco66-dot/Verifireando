@@ -260,19 +260,47 @@ export const AuthProvider = ({ children }) => {
         toast.success('¡Cuenta creada exitosamente! Verifica tu email.')
         return { success: true, user: normalizedUser }
       }
-      const response = await authAPI.post('/register', userData)
-      const { user, token } = response.data
-
-      setToken(token)
-      const normalizedUser = {
-        ...user,
-        isActive: user?.isActive ?? true,
-        isVerified: user?.isVerified ?? false,
-      }
-      dispatch({ type: 'SET_USER', payload: normalizedUser })
       
-      toast.success('¡Cuenta creada exitosamente!')
-      return { success: true, user: normalizedUser }
+      // API backend (no Firebase)
+      const response = await authAPI.post('/register', userData)
+      
+      // El backend devuelve needsVerification: true, no un token
+      if (response.data.needsVerification) {
+        // Mostrar código de desarrollo si existe
+        if (response.data.devCode) {
+          toast('Tu código de verificación es: ' + response.data.devCode, {
+            duration: 15000,
+            icon: '🔑'
+          })
+        }
+        
+        dispatch({ type: 'SET_LOADING', payload: false })
+        toast.success('¡Cuenta creada! Verifica tu cuenta con el código enviado.')
+        return { 
+          success: true, 
+          needsVerification: true, 
+          userId: response.data.userId,
+          email: userData.email,
+          role: userData.role
+        }
+      }
+      
+      // Si por alguna razón devuelve token (no debería en registro normal)
+      const { user, token } = response.data
+      if (token) {
+        setToken(token)
+        const normalizedUser = {
+          ...user,
+          isActive: user?.isActive ?? true,
+          isVerified: user?.isVerified ?? false,
+        }
+        dispatch({ type: 'SET_USER', payload: normalizedUser })
+        toast.success('¡Cuenta creada exitosamente!')
+        return { success: true, user: normalizedUser }
+      }
+      
+      dispatch({ type: 'SET_LOADING', payload: false })
+      return { success: true }
     } catch (error) {
       const message = error?.message || error.response?.data?.message || 'Error al crear la cuenta'
       toast.error(message)
