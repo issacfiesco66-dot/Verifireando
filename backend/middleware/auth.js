@@ -22,12 +22,15 @@ const auth = async (req, res, next) => {
       
       const decoded = jwt.verify(token, secret);
       logger.info(`Auth: JWT decoded successfully for user ID: ${decoded.id}`);
-      let user;
-      if (decoded.role === 'driver') {
+      
+      // Todos los usuarios están en el modelo User (incluyendo drivers)
+      let user = await User.findById(decoded.id).select('-password');
+      
+      // Fallback: buscar en Driver si no se encuentra en User (compatibilidad)
+      if (!user && decoded.role === 'driver') {
         user = await Driver.findById(decoded.id).select('-password');
-      } else {
-        user = await User.findById(decoded.id).select('-password');
       }
+      
       if (!user) {
         logger.warn(`Auth: User not found for ID ${decoded.id} (Role: ${decoded.role})`);
         return res.status(401).json({ message: 'Token inválido' });
@@ -122,12 +125,14 @@ const optionalAuth = async (req, res, next) => {
       // Intentar JWT primero
       try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
-        let user;
-        if (decoded.role === 'driver') {
+        // Todos los usuarios están en el modelo User (incluyendo drivers)
+        let user = await User.findById(decoded.id).select('-password');
+        
+        // Fallback: buscar en Driver si no se encuentra en User (compatibilidad)
+        if (!user && decoded.role === 'driver') {
           user = await Driver.findById(decoded.id).select('-password');
-        } else {
-          user = await User.findById(decoded.id).select('-password');
         }
+        
         if (user) {
           req.user = user;
           req.userId = decoded.id;
