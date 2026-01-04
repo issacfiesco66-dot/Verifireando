@@ -93,11 +93,18 @@ router.post('/register', async (req, res) => {
     };
 
     // Agregar campos de conductor si aplica
-    if (role === 'driver' && licenseNumber) {
-      userData.driverProfile = {
-        licenseNumber: licenseNumber,
-        licenseExpiry: licenseExpiry
-      };
+    if (role === 'driver') {
+      userData.isActive = true;
+      userData.isAvailable = true;
+      userData.isOnline = false; // Se pondrá en true cuando se conecte por socket
+      userData.isVerified = false; // Se pondrá en true después de verificar OTP
+      
+      if (licenseNumber) {
+        userData.driverProfile = {
+          licenseNumber: licenseNumber,
+          licenseExpiry: licenseExpiry
+        };
+      }
     }
 
     const user = new User(userData);
