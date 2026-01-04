@@ -31,7 +31,8 @@ const adminRoutes = require('./routes/admin');
 
 // Crear aplicación Express
 const app = express();
-app.set('trust proxy', true);
+// Configurar trust proxy para Nginx (1 = confiar en el primer proxy)
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // Configurar Socket.IO
@@ -145,25 +146,27 @@ app.use(helmet({
 app.use(cors(corsOptions));
 app.use(compression());
 
-// Rate limiting - Configuración más permisiva para desarrollo
+// Rate limiting - Configuración más permisiva
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 1000 requests en desarrollo, 100 en producción
+  max: 500, // 500 requests por IP cada 15 minutos
   message: {
     error: 'Demasiadas solicitudes desde esta IP, intenta de nuevo más tarde.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { trustProxy: false } // Desactivar validación de trust proxy
 });
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 500 intentos en desarrollo (React StrictMode), 5 en producción
+  max: 50, // 50 intentos de auth por IP cada 15 minutos
   message: {
     error: 'Demasiados intentos de autenticación, intenta de nuevo más tarde.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  validate: { trustProxy: false } // Desactivar validación de trust proxy
 });
 
 app.use(limiter);
