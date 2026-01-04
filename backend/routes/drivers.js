@@ -4,7 +4,6 @@ const Driver = require('../models/Driver');
 const User = require('../models/User');
 const Appointment = require('../models/Appointment');
 const { auth, authorize } = require('../middleware/auth');
-const { mockDrivers } = require('../config/mockDatabase');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -41,57 +40,51 @@ const locationSchema = Joi.object({
   lng: Joi.number().min(-180).max(180).required()
 });
 
-// Obtener todos los choferes (admin) o choferes disponibles (público) - USANDO DATOS MOCK
+// Obtener todos los choferes (admin) o choferes disponibles (público)
 router.get('/', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     
-    // Usar datos mock en lugar de MongoDB
-    let filteredDrivers = [...mockDrivers];
+    // Construir query base
+    let query = { role: 'driver' };
     
     // Si no es admin, solo mostrar choferes verificados y activos
     if (!req.user || req.userRole !== 'admin') {
-      filteredDrivers = filteredDrivers.filter(driver => 
-        driver.isVerified === true && 
-        driver.isActive === true
-      );
+      query.isVerified = true;
+      query.isActive = true;
     }
     
     // Filtros adicionales para admin
     if (req.user && req.userRole === 'admin') {
       if (req.query.isOnline !== undefined) {
-        const isOnline = req.query.isOnline === 'true';
-        filteredDrivers = filteredDrivers.filter(driver => driver.isOnline === isOnline);
+        query.isOnline = req.query.isOnline === 'true';
       }
       
       if (req.query.isAvailable !== undefined) {
-        const isAvailable = req.query.isAvailable === 'true';
-        filteredDrivers = filteredDrivers.filter(driver => driver.isAvailable === isAvailable);
+        query.isAvailable = req.query.isAvailable === 'true';
       }
     }
     
     // Filtro de búsqueda
     if (req.query.search) {
-      const searchTerm = req.query.search.toLowerCase();
-      filteredDrivers = filteredDrivers.filter(driver => 
-        driver.name.toLowerCase().includes(searchTerm) ||
-        driver.email.toLowerCase().includes(searchTerm) ||
-        driver.licenseNumber.toLowerCase().includes(searchTerm) ||
-        (driver.vehicleInfo && driver.vehicleInfo.plates && driver.vehicleInfo.plates.toLowerCase().includes(searchTerm))
-      );
+      const searchTerm = req.query.search;
+      query.$or = [
+        { name: { $regex: searchTerm, $options: 'i' } },
+        { email: { $regex: searchTerm, $options: 'i' } },
+        { 'driverProfile.licenseNumber': { $regex: searchTerm, $options: 'i' } },
+        { 'driverProfile.vehicleInfo.plates': { $regex: searchTerm, $options: 'i' } }
+      ];
     }
 
-    // Aplicar paginación
-    const total = filteredDrivers.length;
-    const drivers = filteredDrivers
-      .slice(skip, skip + limit)
-      .map(driver => {
-        // Remover información sensible
-        const { password, bankInfo, ...safeDriver } = driver;
-        return safeDriver;
-      });
+    // Buscar en User (modelo principal)
+    const total = await User.countDocuments(query);
+    const drivers = await User.find(query)
+      .select('-password')
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     res.json({
       drivers,
@@ -179,19 +172,19 @@ router.get('/stats', auth, authorize(['driver']), async (req, res) => {
 // Obtener información del vehículo del chofer actual
 router.get('/vehicle', auth, authorize(['driver']), async (req, res) => {
   try {
-    // Buscar primero en Driver, luego en User (modelo principal)
-    let driver = await Driver.findById(req.userId).select('vehicleInfo');
-    
-    if (!driver) {
-      // Fallback: buscar en User model
-      const user = await User.findById(req.userId).select('driverProfile');
-      if (user && user.driverProfile) {
-        return res.json(user.driverProfile.vehicleInfo || {});
-      }
-      return res.status(404).json({ message: 'Chofer no encontrado' });
+    // Buscar primero en User (modelo principal), luego en Driver (compatibilidad)
+    const user = await User.findById(req.userId).select('driverProfile role');
+    if (user && user.role === 'driver') {
+      return res.json(user.driverProfile?.vehicleInfo || {});
     }
-
-    res.json(driver.vehicleInfo || {});
+    
+    // Fallback: buscar en Driver model
+    const driver = await Driver.findById(req.userId).select('vehicleInfo');
+    if (driver) {
+      return res.json(driver.vehicleInfo || {});
+    }
+    
+    return res.status(404).json({ message: 'Chofer no encontrado' });
 
   } catch (error) {
     logger.error('Error obteniendo información del vehículo:', error);

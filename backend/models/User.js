@@ -103,6 +103,26 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // Campos de nivel superior para drivers (usados en búsquedas)
+  isOnline: {
+    type: Boolean,
+    default: false
+  },
+  isAvailable: {
+    type: Boolean,
+    default: false
+  },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number],
+      default: [0, 0]
+    }
+  },
   authProvider: {
     type: String,
     enum: ['local', 'google'],
@@ -123,6 +143,8 @@ const userSchema = new mongoose.Schema({
 // Índices
 userSchema.index({ phone: 1 });
 userSchema.index({ 'address.coordinates': '2dsphere' });
+userSchema.index({ location: '2dsphere' });
+userSchema.index({ role: 1, isOnline: 1, isAvailable: 1, isVerified: 1, isActive: 1 });
 
 // Middleware para hashear contraseña antes de guardar
 userSchema.pre('save', async function(next) {
