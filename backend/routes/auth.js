@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const Joi = require('joi');
 const User = require('../models/User');
+const Driver = require('../models/Driver');
 const { auth } = require('../middleware/auth');
 const logger = require('../utils/logger');
 
