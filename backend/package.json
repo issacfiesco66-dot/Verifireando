@@ -2,10 +2,10 @@
   "name": "verifireando-backend",
   "version": "1.0.0",
   "description": "Backend para aplicación de verificación vehicular con recolección y servicios extra",
-  "main": "app.js",
+  "main": "app-server.js",
   "scripts": {
-    "start": "node --trace-warnings app.js",
-    "dev": "nodemon app.js",
+    "start": "node --trace-warnings app-server.js",
+    "dev": "nodemon app-server.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
