@@ -47,6 +47,13 @@ server {
     root /var/www/html;
     index index.html;
 
+    # Service Worker - serve with correct MIME type
+    location = /sw.js {
+        add_header Content-Type application/javascript;
+        add_header Cache-Control "no-cache";
+        try_files $uri =404;
+    }
+
     # Frontend SPA
     location / {
         try_files $uri $uri/ /index.html;
@@ -65,7 +72,7 @@ server {
         proxy_cache_bypass $http_upgrade;
     }
 
-    # Socket.IO Proxy
+    # Socket.IO Proxy with WebSocket support
     location /socket.io {
         proxy_pass http://localhost:5000;
         proxy_http_version 1.1;
@@ -75,6 +82,12 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        
+        # WebSocket specific settings
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+        proxy_connect_timeout 60s;
+        proxy_buffering off;
     }
 
     # Static files caching

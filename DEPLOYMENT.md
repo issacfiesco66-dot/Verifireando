@@ -271,6 +271,52 @@ Configura los webhooks en los servicios externos:
 - Netlify/Vercel: SSL automático
 - Asegúrate de que todas las URLs usen HTTPS
 
+### SSL en AWS EC2 (Let's Encrypt)
+
+Si estás desplegando en AWS EC2, ejecuta el script de configuración SSL:
+
+```bash
+# Conectar al servidor EC2
+ssh -i tu-clave.pem ubuntu@tu-ip-ec2
+
+# Ejecutar el script de SSL
+cd /home/ubuntu/Verifireando
+sudo bash setup-ssl.sh
+```
+
+El script `setup-ssl.sh` automáticamente:
+1. Instala Certbot con el plugin de Nginx
+2. Obtiene certificados SSL de Let's Encrypt para `www.verificandoando.com.mx`
+3. Configura renovación automática
+4. Actualiza Nginx con la configuración HTTPS
+
+**Verificar SSL:**
+```bash
+# Verificar que el certificado esté activo
+sudo certbot certificates
+
+# Probar renovación automática
+sudo certbot renew --dry-run
+```
+
+### Solución de Problemas Comunes
+
+#### Service Worker MIME Type Error
+Si ves el error `sw.js has unsupported MIME type: text/html`:
+- Asegúrate de que el archivo `sw.js` exista en `/var/www/html/` (o el directorio de tu frontend)
+- La configuración de Nginx ya incluye un bloque específico para servir `sw.js` con el MIME type correcto
+
+#### WebSocket Connection Failed
+Si ves errores de WebSocket (`wss://` connection failed):
+- Verifica que Nginx tenga la configuración de proxy para `/socket.io`
+- La configuración actualizada incluye timeouts extendidos y `proxy_buffering off`
+- Reinicia Nginx después de cambios: `sudo systemctl restart nginx`
+
+#### Driver Profile 404
+Si `/api/drivers/vehicle` devuelve 404:
+- El endpoint ahora busca en ambos modelos (Driver y User)
+- Asegúrate de que el usuario tenga rol `driver` en la base de datos
+
 ## 🧪 6. Testing en Producción
 
 ### Checklist de Verificación

@@ -454,7 +454,35 @@ router.post('/', auth, async (req, res) => {
       { path: 'car', select: 'plates brand model color' }
     ]);
 
-    // Socket.IO removed - real-time updates disabled
+    // Emitir evento de socket para nueva cita
+    if (req.io) {
+      // Notificar al cliente que su cita fue creada
+      req.io.to(`user-${req.userId}`).emit('appointment-created', {
+        appointmentId: appointment._id,
+        appointmentNumber: appointment.appointmentNumber,
+        status: appointment.status,
+        timestamp: new Date()
+      });
+      
+      // Si se asignó un chofer, notificarle
+      if (driver) {
+        req.io.to(`driver-${driver._id}`).emit('appointment-assigned', {
+          appointmentId: appointment._id,
+          appointmentNumber: appointment.appointmentNumber,
+          status: appointment.status,
+          pickupAddress: value.pickupAddress,
+          timestamp: new Date()
+        });
+      } else {
+        // Emitir a todos los choferes que hay una nueva cita disponible
+        req.io.emit('new-appointment-available', {
+          appointmentId: appointment._id,
+          appointmentNumber: appointment.appointmentNumber,
+          pickupAddress: value.pickupAddress,
+          timestamp: new Date()
+        });
+      }
+    }
 
     logger.info(`Cita creada: ${appointment.appointmentNumber} por ${req.user.email}`);
 
@@ -571,7 +599,34 @@ router.put('/:id/status', auth, async (req, res) => {
       }
     });
 
-    // Socket.IO removed - real-time updates disabled
+    // Emitir evento de socket para actualización en tiempo real
+    if (req.io) {
+      // Notificar al cliente
+      req.io.to(`user-${appointment.client._id}`).emit('appointment-updated', {
+        appointmentId: appointment._id,
+        appointmentNumber: appointment.appointmentNumber,
+        status: value.status,
+        timestamp: new Date()
+      });
+      
+      // Notificar al chofer si está asignado
+      if (appointment.driver) {
+        req.io.to(`driver-${appointment.driver._id || appointment.driver}`).emit('appointment-updated', {
+          appointmentId: appointment._id,
+          appointmentNumber: appointment.appointmentNumber,
+          status: value.status,
+          timestamp: new Date()
+        });
+      }
+      
+      // Emitir a la sala de la cita
+      req.io.to(`appointment-${appointment._id}`).emit('appointment-updated', {
+        appointmentId: appointment._id,
+        appointmentNumber: appointment.appointmentNumber,
+        status: value.status,
+        timestamp: new Date()
+      });
+    }
 
     logger.info(`Estado de cita actualizado: ${appointment.appointmentNumber} a ${value.status} por ${req.user.email}`);
 
@@ -984,7 +1039,25 @@ router.put('/:id/accept', auth, async (req, res) => {
       }
     });
 
-    // Socket.IO removed - real-time updates disabled
+    // Emitir evento de socket para notificar al cliente en tiempo real
+    if (req.io) {
+      req.io.to(`user-${appointment.client._id}`).emit('appointment-updated', {
+        appointmentId: appointment._id,
+        appointmentNumber: appointment.appointmentNumber,
+        status: 'assigned',
+        driverName: driver.name,
+        driverPhone: driver.phone,
+        timestamp: new Date()
+      });
+      
+      // Emitir a la sala de la cita
+      req.io.to(`appointment-${appointment._id}`).emit('appointment-updated', {
+        appointmentId: appointment._id,
+        appointmentNumber: appointment.appointmentNumber,
+        status: 'assigned',
+        timestamp: new Date()
+      });
+    }
 
     logger.info(`Cita aceptada: ${appointment.appointmentNumber} por chofer ${driver.email}`);
 

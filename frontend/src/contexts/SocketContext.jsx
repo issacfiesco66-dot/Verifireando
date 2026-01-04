@@ -46,6 +46,16 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('connect', () => {
       console.log('Socket connected:', newSocket.id);
       setIsConnected(true);
+      
+      // Unirse a la sala del usuario automáticamente
+      if (user?._id) {
+        newSocket.emit('join-user-room', user._id);
+        
+        // Si es chofer, unirse también a la sala de chofer
+        if (user.role === 'driver') {
+          newSocket.emit('join-driver-room', user._id);
+        }
+      }
     });
 
     newSocket.on('disconnect', (reason) => {

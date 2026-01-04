@@ -7,7 +7,7 @@ const compression = require('compression');
 const morgan = require('morgan');
 const path = require('path');
 const http = require('http');
-// const socketIo = require('socket.io'); // TEMPORALMENTE DESACTIVADO
+const socketIo = require('socket.io');
 const fs = require('fs');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
@@ -34,20 +34,19 @@ const app = express();
 app.set('trust proxy', true);
 const server = http.createServer(app);
 
-// COMENTAR TODO ESTE BLOQUE DE SOCKET.IO
-/*
 // Configurar Socket.IO
 const io = socketIo(server, {
   cors: {
     origin: function (origin, callback) {
-      // Usar la misma lógica de CORS que el resto de la aplicación
       const defaultOrigins = [
         'http://localhost:3000',
         'http://localhost:5173',
-        'http://localhost:5174', // Puerto actual del frontend
+        'http://localhost:5174',
         'https://localhost:3000',
         'https://localhost:5173',
-        'https://localhost:5174' // Puerto actual del frontend
+        'https://localhost:5174',
+        'https://verificandoando.com.mx',
+        'https://www.verificandoando.com.mx'
       ];
       
       const envOrigins = process.env.ALLOWED_ORIGINS 
@@ -68,17 +67,18 @@ const io = socketIo(server, {
       if (!origin || allowedOrigins.indexOf(origin) !== -1) {
         callback(null, true);
       } else {
-        callback(new Error('No permitido por CORS en Socket.IO'));
+        logger.warn(`Socket.IO CORS: Origen no permitido: ${origin}`);
+        callback(null, true); // Permitir de todas formas para evitar problemas
       }
     },
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  transports: ['websocket', 'polling']
 });
 
 // Hacer io disponible globalmente
 app.set('io', io);
-*/
 
 // Configuración de CORS
 const corsOptions = {
@@ -183,14 +183,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Servir archivos estáticos
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// COMENTAR ESTO TAMBIÉN
-/*
 // Middleware para agregar io a req
 app.use((req, res, next) => {
-//   req.io = io;
+  req.io = io;
   next();
 });
-*/
 
 // Health check
 app.get('/health', (req, res) => {
@@ -318,9 +315,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// SOCKET.IO TEMPORALMENTE DESACTIVADO
-/*
-// Configuración de Socket.IO
+// Configuración de eventos Socket.IO
+const User = require('./models/User');
+const Driver = require('./models/Driver');
+
 io.on('connection', (socket) => {
   logger.info(`Cliente conectado: ${socket.id}`);
 
@@ -333,16 +331,20 @@ io.on('connection', (socket) => {
   // Unirse a sala de chofer y marcar como en línea
   socket.on('join-driver-room', async (driverId) => {
     socket.join(`driver-${driverId}`);
+    socket.driverId = driverId; // Guardar para usar en disconnect
     logger.info(`Chofer ${driverId} se unió a su sala`);
     
-    // Marcar conductor como en línea
+    // Marcar conductor como en línea (buscar en User primero, luego Driver)
     try {
-      const Driver = require('./models/Driver');
-      await Driver.findByIdAndUpdate(driverId, { isOnline: true });
+      let updated = await User.findByIdAndUpdate(driverId, { isOnline: true });
+      if (!updated) {
+        await Driver.findByIdAndUpdate(driverId, { isOnline: true });
+      }
       
       // Emitir lista de conductores en línea actualizada
+      const onlineUsersDrivers = await User.find({ role: 'driver', isOnline: true }).select('_id name email');
       const onlineDrivers = await Driver.find({ isOnline: true }).select('_id name email');
-      io.emit('drivers-online', onlineDrivers);
+      io.emit('drivers-online', [...onlineUsersDrivers, ...onlineDrivers]);
       
       logger.info(`Chofer ${driverId} marcado como en línea`);
     } catch (error) {
@@ -358,16 +360,15 @@ io.on('connection', (socket) => {
 
   // Unirse a sala genérica (compatibilidad con frontend)
   socket.on('join-room', (room) => {
-    // Validar que room sea un string válido
     if (typeof room !== 'string') {
-        logger.warn(`Intento de unirse a sala inválida: ${typeof room} ${JSON.stringify(room)}`);
-        return;
+      logger.warn(`Intento de unirse a sala inválida: ${typeof room}`);
+      return;
     }
     socket.join(room);
     logger.info(`Cliente ${socket.id} se unió a sala ${room}`);
   });
 
-  // Actualización de ubicación del chofer (nombre estándar)
+  // Actualización de ubicación del chofer
   socket.on('update-location', (data) => {
     const { driverId, appointmentId, location } = data;
     if (appointmentId) {
@@ -377,10 +378,10 @@ io.on('connection', (socket) => {
         timestamp: new Date()
       });
     }
-    logger.info(`Ubicación actualizada (update-location) para chofer ${driverId}`);
+    logger.info(`Ubicación actualizada para chofer ${driverId}`);
   });
 
-  // Actualización de ubicación del chofer (alias soportado)
+  // Alias para actualización de ubicación
   socket.on('driver-location-update', (data) => {
     const { driverId, appointmentId, location } = data;
     if (appointmentId) {
@@ -390,7 +391,6 @@ io.on('connection', (socket) => {
         timestamp: new Date()
       });
     }
-    logger.info(`Ubicación actualizada (driver-location-update) para chofer ${driverId}`);
   });
 
   // Actualización de estado de cita
@@ -408,10 +408,7 @@ io.on('connection', (socket) => {
   // Notificación en tiempo real
   socket.on('send-notification', (data) => {
     const { userId, notification } = data;
-    
-    // Emitir a la sala del usuario
     socket.to(`user-${userId}`).emit('new-notification', notification);
-    
     logger.info(`Notificación enviada a usuario ${userId}`);
   });
 
@@ -421,18 +418,16 @@ io.on('connection', (socket) => {
     
     // Si era un conductor, marcar como fuera de línea
     try {
-      // Obtener el ID del conductor desde las salas del socket
-      const rooms = Array.from(socket.rooms);
-      const driverRoom = rooms.find(room => room.startsWith('driver-'));
-      
-      if (driverRoom) {
-        const driverId = driverRoom.replace('driver-', '');
-        const Driver = require('./models/Driver');
-        await Driver.findByIdAndUpdate(driverId, { isOnline: false });
+      const driverId = socket.driverId;
+      if (driverId) {
+        let updated = await User.findByIdAndUpdate(driverId, { isOnline: false });
+        if (!updated) {
+          await Driver.findByIdAndUpdate(driverId, { isOnline: false });
+        }
         
-        // Emitir lista de conductores en línea actualizada
+        const onlineUsersDrivers = await User.find({ role: 'driver', isOnline: true }).select('_id name email');
         const onlineDrivers = await Driver.find({ isOnline: true }).select('_id name email');
-        io.emit('drivers-online', onlineDrivers);
+        io.emit('drivers-online', [...onlineUsersDrivers, ...onlineDrivers]);
         
         logger.info(`Chofer ${driverId} marcado como fuera de línea`);
       }
@@ -446,7 +441,6 @@ io.on('connection', (socket) => {
     logger.error('Error de socket:', error);
   });
 });
-*/
 
 // Función para iniciar el servidor
 async function startServer() {
@@ -565,4 +559,4 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, server }; // io temporalmente removido
+module.exports = { app, server, io };

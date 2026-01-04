@@ -76,17 +76,30 @@ const AppointmentDetails = () => {
   }
 
   const handleAppointmentUpdate = (data) => {
-    if (data.appointmentId === id) {
-      setAppointment(prev => ({ ...prev, ...data.updates }))
-      
-      // Show notification based on update type
-      if (data.updates.status === 'confirmed') {
-        toast.success('Tu cita ha sido confirmada')
-      } else if (data.updates.status === 'in_progress') {
-        toast.success('El chofer ha iniciado el servicio')
-      } else if (data.updates.status === 'completed') {
-        toast.success('Tu cita ha sido completada')
+    if (data.appointmentId === id || data.appointmentId === appointment?._id) {
+      // Actualizar el estado de la cita
+      const newStatus = data.status || data.updates?.status;
+      if (newStatus) {
+        setAppointment(prev => ({ ...prev, status: newStatus }))
+        
+        // Mostrar notificación según el estado
+        const statusMessages = {
+          'assigned': '¡Un chofer ha aceptado tu cita!',
+          'driver_enroute': 'El chofer está en camino',
+          'picked_up': 'Tu vehículo ha sido recogido',
+          'in_verification': 'Tu vehículo está siendo verificado',
+          'completed': 'La verificación ha sido completada',
+          'delivered': 'Tu vehículo ha sido entregado',
+          'cancelled': 'Tu cita ha sido cancelada'
+        };
+        
+        if (statusMessages[newStatus]) {
+          toast.success(statusMessages[newStatus]);
+        }
       }
+      
+      // Refrescar los datos completos de la cita
+      fetchAppointment();
     }
   }
 

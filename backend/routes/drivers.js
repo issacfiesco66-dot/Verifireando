@@ -179,8 +179,15 @@ router.get('/stats', auth, authorize(['driver']), async (req, res) => {
 // Obtener información del vehículo del chofer actual
 router.get('/vehicle', auth, authorize(['driver']), async (req, res) => {
   try {
-    const driver = await Driver.findById(req.userId).select('vehicleInfo');
+    // Buscar primero en Driver, luego en User (modelo principal)
+    let driver = await Driver.findById(req.userId).select('vehicleInfo');
+    
     if (!driver) {
+      // Fallback: buscar en User model
+      const user = await User.findById(req.userId).select('driverProfile');
+      if (user && user.driverProfile) {
+        return res.json(user.driverProfile.vehicleInfo || {});
+      }
       return res.status(404).json({ message: 'Chofer no encontrado' });
     }
 
@@ -197,8 +204,33 @@ router.put('/vehicle', auth, authorize(['driver']), async (req, res) => {
   try {
     const { brand, model, year, plates, color, photos } = req.body;
 
-    const driver = await Driver.findById(req.userId);
+    // Buscar primero en Driver, luego en User (modelo principal)
+    let driver = await Driver.findById(req.userId);
+    
     if (!driver) {
+      // Fallback: buscar en User model
+      const user = await User.findById(req.userId);
+      if (user && user.role === 'driver') {
+        if (!user.driverProfile) {
+          user.driverProfile = {};
+        }
+        
+        user.driverProfile.vehicleInfo = {
+          brand: brand || user.driverProfile.vehicleInfo?.brand,
+          model: model || user.driverProfile.vehicleInfo?.model,
+          year: year || user.driverProfile.vehicleInfo?.year,
+          plates: plates || user.driverProfile.vehicleInfo?.plates,
+          color: color || user.driverProfile.vehicleInfo?.color,
+          photos: photos || user.driverProfile.vehicleInfo?.photos || []
+        };
+
+        await user.save();
+
+        return res.json({
+          message: 'Información del vehículo actualizada exitosamente',
+          vehicleInfo: user.driverProfile.vehicleInfo
+        });
+      }
       return res.status(404).json({ message: 'Chofer no encontrado' });
     }
 

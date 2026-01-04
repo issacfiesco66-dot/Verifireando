@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation } from '../../contexts/LocationContext'
+import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import NotificationPanel from '../../components/driver/NotificationPanel'
@@ -24,6 +25,7 @@ import toast from 'react-hot-toast'
 const Dashboard = () => {
   const { user } = useAuth()
   const { currentLocation, requestLocationPermission } = useLocation()
+  const { socket, isConnected, emit } = useSocket()
   const [appointments, setAppointments] = useState([])
   const [stats, setStats] = useState({
     today: 0,
@@ -38,6 +40,36 @@ const Dashboard = () => {
     fetchAppointments()
     checkOnlineStatus()
   }, [])
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleAppointmentAssigned = (data) => {
+      console.log('Nueva cita asignada:', data);
+      toast.success(`¡Nueva cita asignada! #${data.appointmentNumber}`);
+      fetchAppointments(); // Refrescar lista de citas
+    };
+
+    const handleAppointmentUpdated = (data) => {
+      console.log('Cita actualizada:', data);
+      fetchAppointments(); // Refrescar lista de citas
+    };
+
+    const handleNewAppointmentAvailable = (data) => {
+      console.log('Nueva cita disponible:', data);
+      toast.success('¡Hay una nueva cita disponible!', { icon: '🚗' });
+    };
+
+    socket.on('appointment-assigned', handleAppointmentAssigned);
+    socket.on('appointment-updated', handleAppointmentUpdated);
+    socket.on('new-appointment-available', handleNewAppointmentAvailable);
+
+    return () => {
+      socket.off('appointment-assigned', handleAppointmentAssigned);
+      socket.off('appointment-updated', handleAppointmentUpdated);
+      socket.off('new-appointment-available', handleNewAppointmentAvailable);
+    };
+  }, [socket])
 
   useEffect(() => {
     if (currentLocation && isOnline) {
