@@ -7,7 +7,8 @@ import {
   Car,
   Route,
   Locate,
-  RefreshCw
+  RefreshCw,
+  CheckCircle
 } from 'lucide-react'
 import { appointmentService } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -207,20 +208,41 @@ const Map = () => {
                 </div>
                 
                 <div className="flex flex-col space-y-2 ml-4">
-                  <button
-                    onClick={() => navigateToAppointment(appointment)}
-                    className="flex items-center px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
-                  >
-                    <Navigation className="w-4 h-4 mr-2" />
-                    Navegar
-                  </button>
-                  <button
-                    onClick={() => callClient(appointment.clientPhone)}
-                    className="flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
-                  >
-                    <Phone className="w-4 h-4 mr-2" />
-                    Llamar
-                  </button>
+                  {appointment.status === 'pending' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await appointmentService.acceptAppointment(appointment.id)
+                          toast.success('Cita aceptada exitosamente')
+                          fetchAppointments() // Refrescar lista
+                        } catch (error) {
+                          toast.error('Error al aceptar la cita')
+                        }
+                      }}
+                      className="flex items-center px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Aceptar
+                    </button>
+                  )}
+                  {appointment.status !== 'pending' && (
+                    <>
+                      <button
+                        onClick={() => navigateToAppointment(appointment)}
+                        className="flex items-center px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors text-sm"
+                      >
+                        <Navigation className="w-4 h-4 mr-2" />
+                        Navegar
+                      </button>
+                      <button
+                        onClick={() => callClient(appointment.clientPhone)}
+                        className="flex items-center px-3 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                      >
+                        <Phone className="w-4 h-4 mr-2" />
+                        Llamar
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
               

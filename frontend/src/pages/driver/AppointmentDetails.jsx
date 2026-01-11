@@ -60,8 +60,8 @@ const AppointmentDetails = () => {
   const fetchAppointmentDetails = async () => {
     try {
       setLoading(true)
-      const response = await appointmentService.getAppointmentDetails(id)
-      setAppointment(response.data)
+      const response = await appointmentService.getAppointment(id)
+      setAppointment(response.data.appointment || response.data)
       setPhotos(response.data.photos || [])
       setDocuments(response.data.documents || [])
       setNotes(response.data.driverNotes || '')
@@ -89,8 +89,7 @@ const AppointmentDetails = () => {
   const updateAppointmentStatus = async (newStatus) => {
     try {
       setUpdating(true)
-      await appointmentService.updateAppointmentStatus(id, {
-        status: newStatus,
+      await appointmentService.updateStatus(id, newStatus, {
         driverNotes: notes
       })
       

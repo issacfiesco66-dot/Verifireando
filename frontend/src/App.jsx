@@ -38,6 +38,7 @@ import BookAppointment from './pages/client/NewAppointment'
 import DriverDashboard from './pages/driver/Dashboard'
 import DriverAppointments from './pages/driver/Appointments'
 import AppointmentManagement from './pages/driver/AppointmentManagement'
+import DriverAppointmentDetails from './pages/driver/AppointmentDetails'
 import DriverProfile from './pages/driver/Profile'
 import DriverEarnings from './pages/driver/Earnings'
 import DriverMap from './pages/driver/Map'
@@ -147,6 +148,7 @@ function App() {
           <Route index element={<Navigate to="/driver/dashboard" replace />} />
           <Route path="dashboard" element={<DriverDashboard />} />
           <Route path="appointments" element={<DriverAppointments />} />
+          <Route path="appointments/:id" element={<DriverAppointmentDetails />} />
           <Route path="manage-appointments" element={<AppointmentManagement />} />
           <Route path="map" element={<DriverMap />} />
           <Route path="earnings" element={<DriverEarnings />} />

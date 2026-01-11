@@ -14,6 +14,7 @@ import {
   Power,
   Route
 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation } from '../../contexts/LocationContext'
 import { useSocket } from '../../contexts/SocketContext'
@@ -55,9 +56,11 @@ const Dashboard = () => {
       fetchAppointments(); // Refrescar lista de citas
     };
 
-    const handleNewAppointmentAvailable = (data) => {
-      console.log('Nueva cita disponible:', data);
+    const handleNewAppointmentAvailable = (appointment) => {
+      console.log('Nueva cita disponible:', appointment);
       toast.success('¡Hay una nueva cita disponible!', { icon: '🚗' });
+      // Opcional: refrescar lista
+      fetchAppointments();
     };
 
     socket.on('appointment-assigned', handleAppointmentAssigned);
@@ -91,11 +94,11 @@ const Dashboard = () => {
           const aptDate = new Date(apt.scheduledDate)
           return aptDate.toDateString() === today.toDateString()
         }).length,
-        pending: appointmentsData.filter(apt => apt.status === 'assigned' || apt.status === 'driver_enroute').length,
+        pending: appointmentsData.filter(apt => ['assigned','driver_enroute','picked_up','in_verification'].includes(apt.status)).length,
         completed: appointmentsData.filter(apt => apt.status === 'completed').length,
         earnings: appointmentsData
           .filter(apt => apt.status === 'completed')
-          .reduce((total, apt) => total + (apt.totalPrice || 0), 0)
+          .reduce((total, apt) => total + (apt.pricing?.total || 0), 0)
       }
       
       setStats(stats)
@@ -326,7 +329,7 @@ const Dashboard = () => {
                               Cliente: {appointment.client?.name || 'No asignado'}
                             </p>
                             <p className="text-sm text-gray-600">
-                              {appointment.location?.address || 'Dirección no especificada'}
+                              {appointment.pickupAddress?.street || 'Dirección no especificada'}
                             </p>
                             <div className="flex items-center space-x-2 mt-1">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
@@ -337,16 +340,33 @@ const Dashboard = () => {
                               }`}>
                                 {getStatusText(appointment.status)}
                               </span>
-                              {appointment.payment?.amount && (
+                              {appointment.pricing?.total && (
                                 <span className="text-xs text-gray-500">
-                                  ${appointment.payment.amount}
+                                  ${appointment.pricing.total}
                                 </span>
                               )}
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          {appointment.location && (
+                          {appointment.status === 'pending' && (
+                            <button
+                              onClick={async () => {
+                                try {
+                                  await appointmentService.acceptAppointment(appointment._id)
+                                  toast.success('Cita aceptada exitosamente')
+                                  fetchAppointments() // Refrescar lista
+                                } catch (error) {
+                                  toast.error(error.response?.data?.message || 'Error al aceptar la cita')
+                                }
+                              }}
+                              className="btn btn-success btn-sm flex items-center space-x-1"
+                            >
+                              <CheckCircle className="w-3 h-3" />
+                              <span>Aceptar</span>
+                            </button>
+                          )}
+                          {appointment.status !== 'pending' && appointment.location && (
                             <button
                               onClick={() => {
                                 const url = `https://www.google.com/maps/dir/?api=1&destination=${appointment.location.coordinates[1]},${appointment.location.coordinates[0]}`
@@ -452,16 +472,16 @@ const Dashboard = () => {
               <h3 className="font-semibold text-gray-900 mb-2">
                 Información del vehículo
               </h3>
-              {user?.vehicleInfo ? (
+              {user?.driverProfile?.vehicleInfo ? (
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">
                     <Car className="w-4 h-4 text-gray-400" />
                     <span className="text-sm text-gray-600">
-                      {user.vehicleInfo.make} {user.vehicleInfo.model}
+                      {user.driverProfile.vehicleInfo.brand} {user.driverProfile.vehicleInfo.model}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500">
-                    Placa: {user.vehicleInfo.licensePlate}
+                    Placa: {user.driverProfile.vehicleInfo.plates}
                   </p>
                 </div>
               ) : (

@@ -1018,10 +1018,10 @@ router.put('/:id/accept', auth, async (req, res) => {
       });
     }
 
-    // Buscar driver en User (todos están en User ahora)
-    const driver = await User.findById(req.userId);
+    // Buscar driver en Driver (ahora están en el modelo Driver)
+    const driver = await Driver.findById(req.userId);
     
-    if (!driver || driver.role !== 'driver') {
+    if (!driver) {
       return res.status(400).json({ 
         message: 'Chofer no encontrado' 
       });
