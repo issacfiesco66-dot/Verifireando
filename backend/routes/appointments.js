@@ -447,54 +447,94 @@ router.post('/', auth, async (req, res) => {
 
     if (pendingAppointment) {
       return res.status(409).json({ 
-        message: 'Ya tienes una cita pendiente para este vehículo' 
+        message: `Ya tienes una cita pendiente para este vehículo. Cita #${pendingAppointment.appointmentNumber || pendingAppointment._id} con estado: ${pendingAppointment.status}`,
+        existingAppointmentId: pendingAppointment._id,
+        existingAppointmentNumber: pendingAppointment.appointmentNumber,
+        status: pendingAppointment.status
       });
     }
 
+    // Convertir coordenadas al formato correcto (pickupAddress usa GeoJSON, deliveryAddress usa lat/lng simple)
+    const pickupLng = parseFloat(value.pickupAddress.coordinates.lng);
+    const pickupLat = parseFloat(value.pickupAddress.coordinates.lat);
+    const deliveryLng = parseFloat(value.deliveryAddress?.coordinates?.lng) || pickupLng;
+    const deliveryLat = parseFloat(value.deliveryAddress?.coordinates?.lat) || pickupLat;
+    
+    if (isNaN(pickupLng) || isNaN(pickupLat)) {
+      return res.status(400).json({ 
+        message: 'Coordenadas de recogida inválidas' 
+      });
+    }
+    
+    // Calcular precio base
+    let basePrice = 500;
+    let additionalServicesPrice = 0;
+    if (value.services?.additionalServices?.length > 0) {
+      additionalServicesPrice = value.services.additionalServices.reduce(
+        (sum, service) => sum + (service.price || 0), 
+        0
+      );
+    }
+    const subtotal = basePrice + additionalServicesPrice;
+    const taxes = subtotal * 0.16; // IVA 16%
+    const total = subtotal + taxes;
+
     // Mapear scheduledTime a timeSlot y agregar pricing base
     const appointmentData = {
-      ...value,
+      car: value.car,
       client: req.userId,
+      scheduledDate: value.scheduledDate,
       timeSlot: {
         start: value.scheduledTime,
         end: calculateEndTime(value.scheduledTime) // Función para calcular hora de fin
       },
+      services: value.services || { verification: true, additionalServices: [] },
+      notes: value.notes || '',
       pricing: {
-        basePrice: 500, // Precio base para verificación
-        additionalServicesPrice: 0,
-        taxes: 80,
-        total: 580
+        basePrice,
+        additionalServicesPrice,
+        taxes,
+        total
       },
-      // Convertir coordenadas al formato GeoJSON
+      // pickupAddress usa formato GeoJSON
       pickupAddress: {
-        ...value.pickupAddress,
+        street: value.pickupAddress.street,
+        city: value.pickupAddress.city,
+        state: value.pickupAddress.state,
+        zipCode: value.pickupAddress.zipCode || '',
         coordinates: {
           type: 'Point',
-          coordinates: [value.pickupAddress.coordinates.lng, value.pickupAddress.coordinates.lat] // [longitude, latitude]
+          coordinates: [pickupLng, pickupLat] // [longitude, latitude] - formato GeoJSON estándar
         }
       },
+      // deliveryAddress usa formato simple lat/lng
       deliveryAddress: {
-        ...value.deliveryAddress,
+        street: value.deliveryAddress?.street || value.pickupAddress.street,
+        city: value.deliveryAddress?.city || value.pickupAddress.city,
+        state: value.deliveryAddress?.state || value.pickupAddress.state,
+        zipCode: value.deliveryAddress?.zipCode || value.pickupAddress.zipCode || '',
         coordinates: {
-          type: 'Point',
-          coordinates: [value.deliveryAddress.coordinates.lng, value.deliveryAddress.coordinates.lat] // [longitude, latitude]
+          lat: deliveryLat,
+          lng: deliveryLng
         },
-        sameAsPickup: value.deliveryAddress.sameAsPickup || false
-      }
-    };
-
-    // Remover scheduledTime ya que no existe en el modelo
-    delete appointmentData.scheduledTime;
-
-    // Crear la cita
-    const appointment = new Appointment({
-      ...appointmentData,
+        sameAsPickup: value.deliveryAddress?.sameAsPickup !== undefined 
+          ? value.deliveryAddress.sameAsPickup 
+          : (deliveryLat === pickupLat && deliveryLng === pickupLng)
+      },
       driver: null, // Asegurar que driver sea null inicialmente
       status: 'pending' // Asegurar que status sea pending inicialmente
-    });
+    };
 
-    // Calcular precio total
-    appointment.calculateTotal();
+    // Crear la cita
+    const appointment = new Appointment(appointmentData);
+
+    // Calcular precio total (el método recalcula basado en servicios adicionales)
+    try {
+      appointment.calculateTotal();
+    } catch (calcError) {
+      logger.warn('Error calculando total, usando precio pre-calculado:', calcError);
+      // Si falla, mantener el precio que ya calculamos
+    }
     
     await appointment.save();
 
@@ -1137,7 +1177,15 @@ router.put('/:id/accept', auth, async (req, res) => {
     }
 
     // Buscar driver en Driver (ahora están en el modelo Driver)
-    const driver = await Driver.findById(req.userId);
+    let driver = await Driver.findById(req.userId);
+    
+    // Fallback: buscar en User si no está en Driver
+    if (!driver) {
+      const userDriver = await User.findById(req.userId);
+      if (userDriver && userDriver.role === 'driver') {
+        driver = userDriver;
+      }
+    }
     
     if (!driver) {
       return res.status(400).json({ 
@@ -1154,13 +1202,26 @@ router.put('/:id/accept', auth, async (req, res) => {
 
     if (appointment.status !== 'pending') {
       return res.status(400).json({ 
-        message: 'Esta cita ya no está disponible' 
+        message: `Esta cita ya no está disponible. Estado actual: ${appointment.status}` 
+      });
+    }
+
+    // Verificar que no tenga driver asignado
+    if (appointment.driver && appointment.driver.toString() !== req.userId) {
+      return res.status(400).json({ 
+        message: 'Esta cita ya tiene un chofer asignado' 
       });
     }
 
     // Asignar chofer
     appointment.driver = req.userId;
     appointment.status = 'assigned';
+    
+    // Inicializar statusHistory si no existe
+    if (!appointment.statusHistory) {
+      appointment.statusHistory = [];
+    }
+    
     appointment.statusHistory.push({
       status: 'assigned',
       timestamp: new Date(),
@@ -1170,37 +1231,44 @@ router.put('/:id/accept', auth, async (req, res) => {
     // Generar código de verificación para el encuentro
     const pickupCode = appointment.generatePickupCode();
 
-    // Marcar driver como no disponible (buscar en Driver)
-    const driverModel = await Driver.findById(req.userId);
-    if (driverModel) {
-      driverModel.isAvailable = false;
-      await driverModel.save();
+    // Marcar driver como no disponible
+    if (driver.isOnline !== undefined) {
+      driver.isAvailable = false;
+      await driver.save();
     } else {
-      // Fallback: buscar en User si no está en Driver
+      // Fallback: usar función auxiliar
       await updateDriverAvailability(req.userId, false);
     }
     
     await appointment.save();
 
-    // Notificar al cliente
-    await Notification.create({
-      recipient: appointment.client._id,
-      recipientModel: 'User',
-      type: 'appointment_assigned',
-      channel: 'push',
-      title: 'Chofer Asignado',
-      message: `${driver.name || driver.email} ha aceptado tu cita. Código de verificación: ${pickupCode}`,
-      data: {
-        appointmentId: appointment._id,
-        appointmentNumber: appointment.appointmentNumber,
-        driverName: driver.name || driver.email,
-        driverPhone: driver.phone || '',
-        pickupCode: pickupCode,
-        priority: 'high'
+    // Notificar al cliente (solo si tiene cliente)
+    try {
+      if (appointment.client && appointment.client._id) {
+        await Notification.create({
+          recipient: appointment.client._id,
+          recipientModel: 'User',
+          type: 'appointment_assigned',
+          channel: 'push',
+          title: 'Chofer Asignado',
+          message: `${driver.name || driver.email || 'Un chofer'} ha aceptado tu cita. Código de verificación: ${pickupCode}`,
+          data: {
+            appointmentId: appointment._id,
+            appointmentNumber: appointment.appointmentNumber || appointment._id,
+            driverName: driver.name || driver.email || 'Chofer',
+            driverPhone: driver.phone || '',
+            pickupCode: pickupCode,
+            priority: 'high'
+          }
+        });
       }
-    });
+    } catch (notifError) {
+      logger.warn('Error creando notificación, continuando:', notifError);
+      // No fallar la aceptación por error de notificación
+    }
 
     // Emitir evento de socket para notificar al cliente en tiempo real
+    try {
     if (req.io) {
       req.io.to(`user-${appointment.client._id}`).emit('appointment-updated', {
         appointmentId: appointment._id,
