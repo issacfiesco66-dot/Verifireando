@@ -1269,39 +1269,68 @@ router.put('/:id/accept', auth, async (req, res) => {
 
     // Emitir evento de socket para notificar al cliente en tiempo real
     try {
-    if (req.io) {
-      req.io.to(`user-${appointment.client._id}`).emit('appointment-updated', {
-        appointmentId: appointment._id,
-        appointmentNumber: appointment.appointmentNumber,
-        status: 'assigned',
-        driverName: driver.name,
-        driverPhone: driver.phone,
-        timestamp: new Date()
-      });
-      
-      // Emitir a la sala de la cita
-      req.io.to(`appointment-${appointment._id}`).emit('appointment-updated', {
-        appointmentId: appointment._id,
-        appointmentNumber: appointment.appointmentNumber,
-        status: 'assigned',
-        timestamp: new Date()
-      });
+      if (req.io && appointment.client && appointment.client._id) {
+        req.io.to(`user-${appointment.client._id}`).emit('appointment-updated', {
+          appointmentId: appointment._id,
+          appointmentNumber: appointment.appointmentNumber || appointment._id,
+          status: 'assigned',
+          driverName: driver.name || driver.email || 'Chofer',
+          driverPhone: driver.phone || '',
+          pickupCode: pickupCode,
+          timestamp: new Date()
+        });
+        
+        // Emitir a la sala de la cita
+        req.io.to(`appointment-${appointment._id}`).emit('appointment-updated', {
+          appointmentId: appointment._id,
+          appointmentNumber: appointment.appointmentNumber || appointment._id,
+          status: 'assigned',
+          timestamp: new Date()
+        });
+      }
+    } catch (socketError) {
+      logger.warn('Error emitiendo socket, continuando:', socketError);
+      // No fallar la aceptación por error de socket
     }
 
-    logger.info(`Cita aceptada: ${appointment.appointmentNumber} por chofer ${driver.email}`);
+    logger.info(`Cita aceptada: ${appointment.appointmentNumber || appointment._id} por chofer ${driver.email || req.userId}`);
+
+    // Populate appointment para respuesta
+    await appointment.populate([
+      { path: 'client', select: 'name email phone' },
+      { path: 'car', select: 'plates brand model color' }
+    ]);
 
     res.json({
       message: 'Cita aceptada exitosamente',
       appointment: {
         id: appointment._id,
-        appointmentNumber: appointment.appointmentNumber,
-        status: appointment.status
+        appointmentNumber: appointment.appointmentNumber || appointment._id,
+        status: appointment.status,
+        pickupCode: pickupCode
       }
     });
 
   } catch (error) {
     logger.error('Error aceptando cita:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
+    logger.error('Error stack:', error.stack);
+    logger.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
+    
+    // Enviar detalles del error en desarrollo
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? (error.message || 'Error interno del servidor al aceptar la cita')
+      : 'Error interno del servidor al aceptar la cita';
+    res.status(500).json({ 
+      message: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && { 
+        error: error.toString(),
+        stack: error.stack
+      })
+    });
   }
 });
 
