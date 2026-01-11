@@ -14,6 +14,7 @@ const carRoutes = require('./routes/cars');
 const appointmentRoutes = require('./routes/appointments');
 const paymentRoutes = require('./routes/payments');
 const notificationRoutes = require('./routes/notifications');
+const serviceRoutes = require('./routes/services');
 
 const logger = require('./utils/logger');
 const { initializeFirebase } = require('./config/firebase');
@@ -82,6 +83,16 @@ initializeFirebase();
 io.on('connection', (socket) => {
   logger.info('Usuario conectado:', socket.id);
   
+  socket.on('join-user-room', (userId) => {
+    socket.join(`user-${userId}`);
+    logger.info(`Usuario ${socket.id} se unió a la sala user-${userId}`);
+  });
+  
+  socket.on('join-driver-room', (driverId) => {
+    socket.join(`driver-${driverId}`);
+    logger.info(`Driver ${socket.id} se unió a la sala driver-${driverId}`);
+  });
+  
   socket.on('join-room', (room) => {
     socket.join(room);
     logger.info(`Usuario ${socket.id} se unió a la sala ${room}`);
@@ -114,6 +125,7 @@ app.use('/api/cars', carRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/services', serviceRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {
@@ -152,7 +164,7 @@ app.use('*', (req, res) => {
   res.status(404).json({ message: 'Ruta no encontrada' });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   logger.info(`Servidor corriendo en puerto ${PORT}`);

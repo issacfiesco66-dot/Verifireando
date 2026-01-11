@@ -25,7 +25,16 @@ export default defineConfig({
       output: {
         entryFileNames: 'assets/[name]-[hash].js',
         chunkFileNames: 'assets/[name]-[hash].js',
-        assetFileNames: 'assets/[name]-[hash].[ext]',
+        assetFileNames: (assetInfo) => {
+          // Mantener archivos PWA en la raíz sin hash
+          const pwaFiles = ['sw.js', 'manifest.webmanifest', 'logo.svg', 'icon-192.svg', 'icon-512.svg', 'offline.html', 'clear-sw.js', 'firebase-messaging-sw.js'];
+          const fileName = assetInfo.name || '';
+          if (pwaFiles.some(file => fileName.includes(file))) {
+            return fileName;
+          }
+          // Otros assets van a assets/ con hash
+          return 'assets/[name]-[hash].[ext]';
+        },
       }
     }
   }

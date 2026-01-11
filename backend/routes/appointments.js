@@ -6,21 +6,26 @@ const Car = require('../models/Car');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { auth, authorize } = require('../middleware/auth');
-const { mockAppointments } = require('../config/mockDatabase');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// Función auxiliar para actualizar estado del driver (busca en User primero, luego Driver)
+// Función auxiliar para actualizar estado del driver (todos están en User)
 async function updateDriverAvailability(driverId, isAvailable) {
   if (!driverId) return;
   
-  // Intentar actualizar en User primero
-  const userResult = await User.findByIdAndUpdate(driverId, { isAvailable });
-  if (userResult) return userResult;
+  // Todos los drivers están en el modelo User ahora
+  const userResult = await User.findByIdAndUpdate(
+    driverId, 
+    { 
+      isAvailable,
+      // También actualizar en driverProfile si existe
+      $set: { 'driverProfile.isAvailable': isAvailable }
+    },
+    { new: true }
+  );
   
-  // Fallback: actualizar en Driver
-  return await Driver.findByIdAndUpdate(driverId, { isAvailable });
+  return userResult;
 }
 
 // Función auxiliar para calcular hora de fin
@@ -99,8 +104,8 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
       let preferredDriver = await User.findOne({
         _id: preferredDriverId,
         role: 'driver',
-        isOnline: true,
-        isAvailable: true,
+        'driverProfile.isOnline': true,
+        'driverProfile.isAvailable': true,
         isVerified: true,
         isActive: true
       });
@@ -125,8 +130,8 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
     try {
       const availableDrivers = await User.find({
         role: 'driver',
-        isOnline: true,
-        isAvailable: true,
+        'driverProfile.isOnline': true,
+        'driverProfile.isAvailable': true,
         isVerified: true,
         isActive: true,
         location: {
@@ -141,18 +146,18 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
       }).limit(5);
 
       if (availableDrivers.length > 0) {
-        console.log('Driver encontrado en User con geolocalización:', availableDrivers[0].name);
+        logger.info('Driver encontrado en User con geolocalización:', availableDrivers[0].name);
         return availableDrivers[0];
       }
     } catch (geoError) {
-      console.warn('Búsqueda geoespacial en User fallida:', geoError.message);
+      logger.warn('Búsqueda geoespacial en User fallida:', geoError.message);
     }
 
     // Buscar en User sin filtro geoespacial
     let anyAvailableDrivers = await User.find({
       role: 'driver',
-      isOnline: true,
-      isAvailable: true,
+      'driverProfile.isOnline': true,
+      'driverProfile.isAvailable': true,
       isVerified: true,
       isActive: true
     }).limit(5);
@@ -168,15 +173,15 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
     }
 
     if (anyAvailableDrivers.length === 0) {
-      console.log('No hay drivers disponibles en User ni Driver');
+      logger.info('No hay drivers disponibles');
       return null;
     }
 
     // Seleccionar el primer driver disponible
-    console.log('Driver asignado sin filtro geoespacial:', anyAvailableDrivers[0].name);
+    logger.info('Driver asignado sin filtro geoespacial:', anyAvailableDrivers[0].name);
     return anyAvailableDrivers[0];
   } catch (error) {
-    console.error('Error finding available driver:', error);
+    logger.error('Error finding available driver:', error);
     return null;
   }
 }
@@ -425,6 +430,9 @@ router.post('/', auth, async (req, res) => {
 
       // Marcar chofer como no disponible
       driver.isAvailable = false;
+      if (driver.driverProfile) {
+        driver.driverProfile.isAvailable = false;
+      }
       await driver.save();
 
       // Enviar notificación al chofer
@@ -552,9 +560,21 @@ router.put('/:id/status', auth, async (req, res) => {
 
     // Actualizar ubicación del chofer si se proporciona
     if (value.location && appointment.driver) {
-      const driver = await Driver.findById(appointment.driver._id);
-      if (driver) {
-        await driver.updateLocation(value.location.lat, value.location.lng);
+      const driver = await User.findById(appointment.driver._id);
+      if (driver && driver.role === 'driver') {
+        // Actualizar ubicación en el modelo User
+        driver.location = {
+          type: 'Point',
+          coordinates: [value.location.lng, value.location.lat]
+        };
+        if (driver.driverProfile) {
+          driver.driverProfile.currentLocation = {
+            lat: value.location.lat,
+            lng: value.location.lng,
+            lastUpdate: new Date()
+          };
+        }
+        await driver.save();
       }
     }
 
@@ -667,8 +687,9 @@ router.put('/:id/assign-driver', auth, authorize('admin'), async (req, res) => {
       });
     }
 
-    const driver = await Driver.findOne({
+    const driver = await User.findOne({
       _id: driverId,
+      role: 'driver',
       isVerified: true,
       isActive: true
     });
@@ -890,9 +911,26 @@ router.post('/:id/rating', auth, async (req, res) => {
 
     // Actualizar rating del chofer
     if (appointment.driver) {
-      const driver = await Driver.findById(appointment.driver._id);
-      if (driver) {
-        await driver.updateRating(value.rating);
+      const driver = await User.findById(appointment.driver._id);
+      if (driver && driver.role === 'driver') {
+        // Actualizar rating en driverProfile
+        if (!driver.driverProfile) {
+          driver.driverProfile = {};
+        }
+        if (!driver.driverProfile.totalTrips) {
+          driver.driverProfile.totalTrips = 0;
+        }
+        if (!driver.driverProfile.rating) {
+          driver.driverProfile.rating = 0;
+        }
+        
+        const totalTrips = driver.driverProfile.totalTrips + 1;
+        const currentRating = driver.driverProfile.rating || 0;
+        const newRating = ((currentRating * driver.driverProfile.totalTrips) + value.rating) / totalTrips;
+        
+        driver.driverProfile.rating = Math.round(newRating * 10) / 10;
+        driver.driverProfile.totalTrips = totalTrips;
+        await driver.save();
       }
     }
 
@@ -918,13 +956,10 @@ router.get('/driver/available', auth, async (req, res) => {
       });
     }
 
-    // Buscar driver en User primero, luego en Driver
-    let driver = await User.findById(req.userId);
-    if (!driver || driver.role !== 'driver') {
-      driver = await Driver.findById(req.userId);
-    }
+    // Buscar driver en User (todos están en User ahora)
+    const driver = await User.findById(req.userId);
     
-    if (!driver) {
+    if (!driver || driver.role !== 'driver') {
       return res.json({ appointments: [] });
     }
 
@@ -983,13 +1018,10 @@ router.put('/:id/accept', auth, async (req, res) => {
       });
     }
 
-    // Buscar driver en User primero, luego en Driver
-    let driver = await User.findById(req.userId);
-    if (!driver || driver.role !== 'driver') {
-      driver = await Driver.findById(req.userId);
-    }
+    // Buscar driver en User (todos están en User ahora)
+    const driver = await User.findById(req.userId);
     
-    if (!driver) {
+    if (!driver || driver.role !== 'driver') {
       return res.status(400).json({ 
         message: 'Chofer no encontrado' 
       });

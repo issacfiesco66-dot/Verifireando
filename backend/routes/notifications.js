@@ -2,10 +2,8 @@ const express = require('express');
 const Joi = require('joi');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
-const Driver = require('../models/Driver');
 const { auth, authorize } = require('../middleware/auth');
 const { sendPushNotification, sendWhatsAppMessage } = require('../config/firebase');
-const { mockNotifications } = require('../config/mockDatabase');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -33,9 +31,8 @@ async function sendNotificationToRecipient(notification, io) {
     let success = false;
     let error = null;
 
-    // Obtener información del destinatario
-    const Model = notification.recipientModel === 'User' ? User : Driver;
-    const recipient = await Model.findById(notification.recipient);
+    // Obtener información del destinatario (todos están en User ahora)
+    const recipient = await User.findById(notification.recipient);
     
     if (!recipient) {
       throw new Error('Destinatario no encontrado');
@@ -183,39 +180,38 @@ router.get('/my-notifications', auth, async (req, res) => {
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
     
-    // Filter notifications for the current user
-    let filteredNotifications = mockNotifications.filter(notification => {
-      // Check if notification belongs to current user
-      const belongsToUser = notification.recipient === req.userId &&
-        notification.recipientModel === (req.userRole === 'driver' ? 'Driver' : 'User');
-      
-      if (!belongsToUser) return false;
-      
-      // Apply additional filters
-      if (req.query.type && notification.type !== req.query.type) {
-        return false;
-      }
-      
-      if (req.query.isRead !== undefined && notification.isRead !== (req.query.isRead === 'true')) {
-        return false;
-      }
-      
-      if (req.query.channel && notification.channel !== req.query.channel) {
-        return false;
-      }
-      
-      return true;
-    });
-
-    // Sort by creation date (newest first)
-    filteredNotifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // Apply pagination
-    const total = filteredNotifications.length;
-    const notifications = filteredNotifications.slice(skip, skip + limit);
+    // Build filter for database query
+    const filter = {
+      recipient: req.userId,
+      recipientModel: 'User' // All users are now in User model
+    };
+    
+    // Apply additional filters
+    if (req.query.type) {
+      filter.type = req.query.type;
+    }
+    
+    if (req.query.isRead !== undefined) {
+      filter.isRead = req.query.isRead === 'true';
+    }
+    
+    if (req.query.channel) {
+      filter.channel = req.query.channel;
+    }
+    
+    // Query database
+    const total = await Notification.countDocuments(filter);
+    const notifications = await Notification.find(filter)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
     
     // Count unread notifications
-    const unreadCount = filteredNotifications.filter(n => !n.isRead).length;
+    const unreadCount = await Notification.countDocuments({
+      recipient: req.userId,
+      recipientModel: 'User',
+      isRead: false
+    });
 
     res.json({
       notifications,
@@ -273,7 +269,7 @@ router.put('/mark-all-as-read', auth, async (req, res) => {
   try {
     const result = await Notification.markAllAsRead(
       req.userId,
-      req.userRole === 'driver' ? 'Driver' : 'User'
+      'User' // Todos los usuarios están en User ahora
     );
 
     res.json({
@@ -290,12 +286,12 @@ router.put('/mark-all-as-read', auth, async (req, res) => {
 // Obtener conteo de notificaciones no leídas
 router.get('/unread-count', auth, async (req, res) => {
   try {
-    // Count unread notifications for the current user
-    const count = mockNotifications.filter(notification => 
-      notification.recipient === req.userId &&
-      notification.recipientModel === (req.userRole === 'driver' ? 'Driver' : 'User') &&
-      !notification.isRead
-    ).length;
+    // Count unread notifications for the current user from database
+    const count = await Notification.countDocuments({
+      recipient: req.userId,
+      recipientModel: 'User',
+      isRead: false
+    });
 
     res.json({ unreadCount: count });
 
@@ -605,11 +601,8 @@ router.post('/register-token', auth, async (req, res) => {
       return res.status(400).json({ message: 'Token FCM requerido' });
     }
 
-    // Determinar el modelo basado en el rol del usuario
-    const Model = req.userRole === 'driver' ? Driver : User;
-    
-    // Actualizar el usuario con el token FCM
-    await Model.findByIdAndUpdate(req.userId, {
+    // Todos los usuarios están en el modelo User ahora
+    await User.findByIdAndUpdate(req.userId, {
       fcmToken: token,
       lastPushSubscriptionUpdate: new Date()
     });
@@ -636,11 +629,8 @@ router.post('/subscribe', auth, async (req, res) => {
       return res.status(400).json({ message: 'Suscripción requerida' });
     }
 
-    // Determinar el modelo basado en el rol del usuario
-    const Model = req.user.role === 'driver' ? Driver : User;
-    
-    // Actualizar el usuario con la información de suscripción push
-    await Model.findByIdAndUpdate(req.user.id, {
+    // Todos los usuarios están en el modelo User ahora
+    await User.findByIdAndUpdate(req.user.id, {
       pushSubscription: subscription,
       userAgent: userAgent,
       lastPushSubscriptionUpdate: new Date()

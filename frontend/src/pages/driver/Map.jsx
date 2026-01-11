@@ -9,8 +9,12 @@ import {
   Locate,
   RefreshCw
 } from 'lucide-react'
+import { appointmentService } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
+import toast from 'react-hot-toast'
 
 const Map = () => {
+  const { user } = useAuth()
   const [appointments, setAppointments] = useState([])
   const [selectedAppointment, setSelectedAppointment] = useState(null)
   const [driverLocation, setDriverLocation] = useState(null)
@@ -24,40 +28,33 @@ const Map = () => {
   const fetchAppointments = async () => {
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await appointmentService.getDriverAppointments()
+      const appointmentsData = response.data.appointments || []
       
-      // Mock data
-      const mockAppointments = [
-        {
-          id: 1,
-          clientName: 'Juan Pérez',
-          clientPhone: '+52 55 1234 5678',
-          address: 'Av. Reforma 123, Polanco, CDMX',
-          coordinates: { lat: 19.4326, lng: -99.1332 },
-          scheduledTime: '10:00',
-          service: 'Verificación Vehicular',
-          carModel: 'Honda Civic 2020',
-          status: 'pending',
-          estimatedDuration: 45
-        },
-        {
-          id: 2,
-          clientName: 'María González',
-          clientPhone: '+52 55 9876 5432',
-          address: 'Calle Roma 456, Roma Norte, CDMX',
-          coordinates: { lat: 19.4150, lng: -99.1620 },
-          scheduledTime: '14:30',
-          service: 'Verificación + Lavado',
-          carModel: 'Toyota Corolla 2019',
-          status: 'confirmed',
-          estimatedDuration: 60
-        }
-      ]
+      // Transform appointments to match the component's expected format
+      const transformedAppointments = appointmentsData.map(apt => ({
+        id: apt._id || apt.id,
+        clientName: apt.client?.name || 'Cliente',
+        clientPhone: apt.client?.phone || '',
+        address: apt.pickupAddress?.street 
+          ? `${apt.pickupAddress.street}, ${apt.pickupAddress.city}, ${apt.pickupAddress.state}`
+          : 'Dirección no disponible',
+        coordinates: apt.pickupAddress?.coordinates || { lat: 19.4326, lng: -99.1332 },
+        scheduledTime: apt.scheduledTime || '00:00',
+        service: apt.services?.verification 
+          ? 'Verificación Vehicular' + (apt.services.additionalServices?.length > 0 ? ' + Servicios adicionales' : '')
+          : 'Servicio no especificado',
+        carModel: apt.car?.make && apt.car?.model 
+          ? `${apt.car.make} ${apt.car.model} ${apt.car.year || ''}`.trim()
+          : 'Vehículo no especificado',
+        status: apt.status || 'pending',
+        estimatedDuration: 45 // Default duration
+      }))
 
-      setAppointments(mockAppointments)
+      setAppointments(transformedAppointments)
     } catch (error) {
       console.error('Error fetching appointments:', error)
+      toast.error('Error al cargar las citas')
     } finally {
       setLoading(false)
     }
