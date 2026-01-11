@@ -204,6 +204,10 @@ const AppointmentDetails = () => {
   }
 
   const openNavigation = () => {
+    if (!appointment?.location?.latitude || !appointment?.location?.longitude) {
+      toast.error('Ubicación no disponible para navegación')
+      return
+    }
     const { latitude, longitude } = appointment.location
     const url = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
     window.open(url, '_blank')
@@ -537,22 +541,28 @@ const AppointmentDetails = () => {
                   </div>
                 </div>
                 
-                <div className="h-96 rounded-lg overflow-hidden">
-                  <MapComponent
-                    center={[appointment.location?.longitude, appointment.location?.latitude]}
-                    markers={[{
-                      id: 'appointment',
-                      longitude: appointment.location?.longitude,
-                      latitude: appointment.location?.latitude,
-                      type: 'appointment',
-                      popup: {
-                        title: 'Ubicación de la cita',
-                        content: appointment.location?.address
-                      }
-                    }]}
-                    zoom={15}
-                  />
-                </div>
+                {appointment.location?.latitude && appointment.location?.longitude ? (
+                  <div className="h-96 rounded-lg overflow-hidden">
+                    <MapComponent
+                      center={[appointment.location.longitude, appointment.location.latitude]}
+                      markers={[{
+                        id: 'appointment',
+                        longitude: appointment.location.longitude,
+                        latitude: appointment.location.latitude,
+                        type: 'appointment',
+                        popup: {
+                          title: 'Ubicación de la cita',
+                          content: appointment.location?.address || 'Ubicación de la cita'
+                        }
+                      }]}
+                      zoom={15}
+                    />
+                  </div>
+                ) : (
+                  <div className="h-96 rounded-lg bg-gray-100 flex items-center justify-center">
+                    <p className="text-gray-500">Ubicación no disponible</p>
+                  </div>
+                )}
               </div>
             )}
 
