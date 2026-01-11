@@ -20,6 +20,7 @@ const logger = require('./utils/logger');
 const { initializeFirebase } = require('./config/firebase');
 
 const app = express();
+app.set('trust proxy', 1);
 const server = createServer(app);
 const defaultOrigins = ["http://localhost:3000", "http://localhost:5173"];
 const envOriginsRaw = process.env.FRONTEND_URL || process.env.CORS_ORIGIN;
