@@ -1,10 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { FcGoogle } from 'react-icons/fc'
 import { useAuth } from '../../contexts/AuthContext'
-import { signInWithGoogle } from '../../firebase.new'
 
-function Login() {
+function DriverLogin() {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -31,27 +29,24 @@ function Login() {
       const result = await login({
         email: formData.email,
         password: formData.password,
-        role: 'client' // Cliente por defecto
+        role: 'driver' // Especificar que es chofer
       })
       
       if (result.success) {
         // Esperar un momento para que el estado se actualice
         await new Promise(resolve => setTimeout(resolve, 100))
         
-        // Redirigir según el rol del usuario (usar result.user o esperar a que el contexto se actualice)
-        const userRole = result.user?.role || user?.role || 'client'
-        let redirectPath = '/client/dashboard'
+        // Redirigir al dashboard de chofer
+        const userRole = result.user?.role || user?.role || 'driver'
+        let redirectPath = '/driver/dashboard'
         
         if (userRole === 'admin') {
           redirectPath = '/admin/dashboard'
-        } else if (userRole === 'driver') {
-          redirectPath = '/driver/dashboard'
         }
         
-        // Usar replace para evitar que el usuario pueda volver atrás
         navigate(redirectPath, { replace: true })
       } else if (result.needsVerification) {
-        navigate('/auth/verify-email', { state: { email: formData.email, userId: result.userId } })
+        navigate('/auth/verify-email', { state: { email: formData.email, userId: result.userId, role: 'driver' } })
       } else {
         setError(result.error || 'Error al iniciar sesión')
       }
@@ -62,72 +57,23 @@ function Login() {
     }
   }
 
-  const handleGoogleSignIn = async () => {
-    setLoading(true)
-    setError('')
-
-    try {
-      const user = await signInWithGoogle()
-      
-      // Enviar el token de Firebase a tu backend
-      const token = await user.getIdToken()
-      
-      // Llamar a tu API para registrar/iniciar sesión con Google
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/google`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          idToken: token,
-          email: user.email,
-          name: user.displayName,
-          photoURL: user.photoURL
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        localStorage.setItem('token', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
-        // Redirigir según el rol del usuario
-        const userRole = data.user?.role || 'client'
-        if (userRole === 'admin') {
-          navigate('/admin/dashboard')
-        } else if (userRole === 'driver') {
-          navigate('/driver/dashboard')
-        } else {
-          navigate('/client/dashboard')
-        }
-      } else {
-        setError(data.message || 'Error al iniciar sesión con Google')
-      }
-    } catch (err) {
-      console.error('Error signing in with Google:', err)
-      setError('Error al iniciar sesión con Google')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Iniciar sesión
+            Iniciar sesión - Chofer
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             ¿No tienes cuenta?{' '}
-            <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
-              Regístrate
+            <Link to="/register?role=driver" className="font-medium text-blue-600 hover:text-blue-500">
+              Regístrate como chofer
             </Link>
           </p>
           <p className="mt-2 text-center text-sm text-gray-500">
-            ¿Eres chofer?{' '}
-            <Link to="/auth/login/driver" className="font-medium text-blue-600 hover:text-blue-500">
-              Inicia sesión como chofer
+            ¿Eres cliente?{' '}
+            <Link to="/auth/login" className="font-medium text-blue-600 hover:text-blue-500">
+              Inicia sesión como cliente
             </Link>
           </p>
         </div>
@@ -203,33 +149,10 @@ function Login() {
               {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
           </div>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-gray-50 text-gray-500">O continuar con</span>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={loading}
-                className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <FcGoogle className="w-5 h-5 mr-2" />
-                {loading ? 'Conectando...' : 'Continuar con Google'}
-              </button>
-            </div>
-          </div>
         </form>
       </div>
     </div>
   )
 }
 
-export default Login
+export default DriverLogin

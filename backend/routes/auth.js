@@ -22,9 +22,8 @@ const registerSchema = Joi.object({
 
 const loginSchema = Joi.object({
   email: Joi.string().email().required(),
-  password: Joi.string().required(),
-  role: Joi.string().valid('client', 'driver', 'admin').default('client')
-});
+  password: Joi.string().required()
+}).unknown(false); // Rechaza campos adicionales como 'role'
 
 const verifyOTPSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -56,7 +55,7 @@ const sendWhatsAppOTP = async (phone, code) => {
   return { success: true, messageId: `mock_${Date.now()}` };
 };
 
-// Registro de usuario/chofer (unificado)
+// Registro de usuario/chofer
 router.post('/register', async (req, res) => {
   try {
     logger.info('Registro - Datos recibidos:', { role: req.body.role, email: req.body.email });
@@ -72,53 +71,79 @@ router.post('/register', async (req, res) => {
 
     const { name, email, phone, password, role, licenseNumber, licenseExpiry } = value;
 
-    // Verificar si el usuario ya existe (buscar en User solamente)
+    // Si es chofer, validar campos requeridos
+    if (role === 'driver') {
+      if (!licenseNumber || !licenseExpiry) {
+        return res.status(400).json({ 
+          message: 'Número de licencia y fecha de vencimiento son requeridos para choferes' 
+        });
+      }
+    }
+
+    // Verificar si el usuario ya existe (buscar en User y Driver)
     const existingUser = await User.findOne({ 
       $or: [{ email }, { phone }] 
     });
+    
+    const existingDriver = await Driver.findOne({ 
+      $or: [{ email }, { phone }] 
+    });
 
-    if (existingUser) {
+    if (existingUser || existingDriver) {
       return res.status(409).json({ 
         message: 'El email o teléfono ya están registrados' 
       });
     }
 
-    // Crear usuario (todos en el mismo modelo)
+    // Si es chofer, crear en el modelo Driver
+    if (role === 'driver') {
+      const driverData = {
+        name,
+        email,
+        phone,
+        password,
+        role: 'driver',
+        licenseNumber,
+        licenseExpiry,
+        isActive: true,
+        isAvailable: false,
+        isOnline: false,
+        isVerified: false
+      };
+
+      const driver = new Driver(driverData);
+      const verificationCode = driver.generateVerificationCode();
+      await driver.save();
+
+      await sendWhatsAppOTP(phone, verificationCode);
+      logger.info(`Chofer registrado: ${email} - Código: ${verificationCode}`);
+
+      return res.status(201).json({
+        message: 'Chofer registrado exitosamente. Código de verificación enviado por WhatsApp.',
+        userId: driver._id,
+        needsVerification: true,
+        devCode: verificationCode
+      });
+    }
+
+    // Si es cliente, crear en el modelo User
     const userData = { 
       name, 
       email, 
       phone, 
       password,
-      role: role || 'client'
+      role: 'client',
+      isActive: true,
+      isVerified: false
     };
 
-    // Agregar campos de conductor si aplica
-    if (role === 'driver') {
-      userData.isActive = true;
-      userData.isAvailable = true;
-      userData.isOnline = false; // Se pondrá en true cuando se conecte por socket
-      userData.isVerified = false; // Se pondrá en true después de verificar OTP
-      
-      if (licenseNumber) {
-        userData.driverProfile = {
-          licenseNumber: licenseNumber,
-          licenseExpiry: licenseExpiry
-        };
-      }
-    }
-
     const user = new User(userData);
-    
-    // Generar código de verificación
     const verificationCode = user.generateVerificationCode();
     await user.save();
 
-    // Enviar OTP por WhatsApp
     await sendWhatsAppOTP(phone, verificationCode);
+    logger.info(`Cliente registrado: ${email} - Código: ${verificationCode}`);
 
-    logger.info(`Usuario registrado: ${email} (${role}) - Código: ${verificationCode}`);
-
-    // Devolver el código en la respuesta (TODO: quitar devCode en producción real)
     res.status(201).json({
       message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp.',
       userId: user._id,
@@ -132,43 +157,41 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login
+// Login para clientes (solo busca en User con role='client')
 router.post('/login', async (req, res) => {
   try {
     const { error, value } = loginSchema.validate(req.body);
     if (error) {
-      logger.error('Login - Validación fallida:', error.details);
+      logger.error('Login Cliente - Validación fallida:', error.details);
       return res.status(400).json({ 
         message: 'Datos inválidos', 
         errors: error.details.map(d => d.message) 
       });
     }
 
-    const { email, password, role } = value;
-    logger.info(`Login intento - Email: ${email}, Role: ${role}`);
+    const { email, password } = value;
+    logger.info(`Login Cliente intento - Email: ${email}`);
 
-    // Buscar usuario (todos están en el mismo modelo ahora)
-    const user = await User.findOne({ email });
+    // Buscar solo en User con role='client' o 'admin'
+    const user = await User.findOne({ 
+      email,
+      role: { $in: ['client', 'admin'] }
+    });
     
     if (!user) {
-      logger.error('Login - Usuario no encontrado');
-      return res.status(401).json({ message: 'Credenciales inválidas' });
-    }
-    
-    // Verificar que el rol coincida
-    if (user.role !== role) {
-      logger.error(`Login - Rol incorrecto. Usuario es ${user.role}, intentó ${role}`);
+      logger.error('Login Cliente - Usuario no encontrado o no es cliente/admin');
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
     
     const userRole = user.role;
+    logger.info(`Login Cliente - Usuario encontrado con rol: ${userRole}`);
 
     // Verificar contraseña
     logger.info('Verificando contraseña...');
     const isValidPassword = await user.comparePassword(password);
     logger.info(`Contraseña válida: ${isValidPassword}`);
     if (!isValidPassword) {
-      logger.error('Login - Contraseña inválida');
+      logger.error('Login Cliente - Contraseña inválida');
       return res.status(401).json({ message: 'Credenciales inválidas' });
     }
 
@@ -177,18 +200,12 @@ router.post('/login', async (req, res) => {
       return res.status(403).json({ message: 'Cuenta desactivada' });
     }
 
-    // Verificar si el usuario está verificado (tanto clientes como conductores)
+    // Verificar si el usuario está verificado
     if (!user.isVerified) {
-      // Generar nuevo código de verificación
       const verificationCode = user.generateVerificationCode();
       await user.save();
-      
-      // Enviar OTP
       await sendWhatsAppOTP(user.phone, verificationCode);
-      
       logger.info(`Código OTP generado para ${email}: ${verificationCode}`);
-      
-      // Devolver el código en la respuesta (TODO: quitar devCode en producción real)
       return res.status(403).json({ 
         message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
         needsVerification: true,
@@ -199,8 +216,7 @@ router.post('/login', async (req, res) => {
 
     // Generar token
     const token = generateToken(user, userRole);
-
-    logger.info(`Login exitoso: ${email} (${userRole})`);
+    logger.info(`Login Cliente exitoso: ${email} (${userRole})`);
 
     res.json({
       message: 'Login exitoso',
@@ -210,17 +226,97 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        role: userRole,
-        ...(userRole === 'driver' && {
-          isOnline: user.isOnline,
-          isAvailable: user.isAvailable,
-          rating: user.rating?.average || 0
-        })
+        role: userRole
       }
     });
 
   } catch (error) {
-    logger.error('Error en login:', error);
+    logger.error('Error en login cliente:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Login para choferes (busca en Driver)
+router.post('/login/driver', async (req, res) => {
+  try {
+    const { error, value } = loginSchema.validate(req.body);
+    if (error) {
+      logger.error('Login Chofer - Validación fallida:', error.details);
+      return res.status(400).json({ 
+        message: 'Datos inválidos', 
+        errors: error.details.map(d => d.message) 
+      });
+    }
+
+    const { email, password } = value;
+    logger.info(`Login Chofer intento - Email: ${email}`);
+
+    // Buscar en el modelo Driver
+    const driver = await Driver.findOne({ email });
+    
+    if (!driver) {
+      logger.error('Login Chofer - Chofer no encontrado');
+      return res.status(401).json({ message: 'Credenciales inválidas' });
+    }
+    
+    logger.info(`Login Chofer - Chofer encontrado: ${driver.email}`);
+
+    // Verificar contraseña
+    logger.info('Verificando contraseña...');
+    const isValidPassword = await driver.comparePassword(password);
+    logger.info(`Contraseña válida: ${isValidPassword}`);
+    if (!isValidPassword) {
+      logger.error('Login Chofer - Contraseña inválida');
+      return res.status(401).json({ message: 'Credenciales inválidas' });
+    }
+
+    // Verificar si el chofer está activo
+    if (!driver.isActive) {
+      return res.status(403).json({ message: 'Cuenta desactivada' });
+    }
+
+    // Verificar si el chofer está verificado
+    if (!driver.isVerified) {
+      const verificationCode = driver.generateVerificationCode();
+      await driver.save();
+      await sendWhatsAppOTP(driver.phone, verificationCode);
+      logger.info(`Código OTP generado para ${email}: ${verificationCode}`);
+      return res.status(403).json({ 
+        message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
+        needsVerification: true,
+        userId: driver._id,
+        devCode: verificationCode
+      });
+    }
+
+    // Actualizar estado a online y disponible
+    driver.isOnline = true;
+    driver.isAvailable = true;
+    await driver.save();
+    logger.info(`Chofer ${email} marcado como online y disponible`);
+
+    // Generar token
+    const token = generateToken(driver, 'driver');
+    logger.info(`Login Chofer exitoso: ${email}`);
+
+    res.json({
+      message: 'Login exitoso',
+      token,
+      user: {
+        id: driver._id,
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone,
+        role: 'driver',
+        isOnline: driver.isOnline,
+        isAvailable: driver.isAvailable,
+        rating: driver.rating?.average || 0,
+        licenseNumber: driver.licenseNumber
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error en login chofer:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
@@ -293,8 +389,8 @@ router.post(['/resend-otp', '/resend-verification'], async (req, res) => {
       return res.status(400).json({ message: 'Email requerido' });
     }
 
-    const Model = role === 'driver' ? Driver : User;
-    const user = await Model.findOne({ email });
+    // Todos los usuarios están en el modelo User ahora
+    const user = await User.findOne({ email });
 
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
@@ -349,8 +445,8 @@ router.put('/profile', auth, async (req, res) => {
       return res.status(400).json({ message: 'No hay campos válidos para actualizar' });
     }
 
-    const Model = req.userRole === 'driver' ? Driver : User;
-    const user = await Model.findByIdAndUpdate(
+    // Todos los usuarios están en el modelo User ahora
+    const user = await User.findByIdAndUpdate(
       req.userId,
       updates,
       { new: true, runValidators: true }
@@ -384,8 +480,8 @@ router.put('/change-password', auth, async (req, res) => {
       });
     }
 
-    const Model = req.userRole === 'driver' ? Driver : User;
-    const user = await Model.findById(req.userId);
+    // Todos los usuarios están en el modelo User ahora
+    const user = await User.findById(req.userId);
 
     // Verificar contraseña actual
     const isValidPassword = await user.comparePassword(currentPassword);

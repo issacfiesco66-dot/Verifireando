@@ -11,6 +11,7 @@ import AdminLayout from './layouts/AdminLayout'
 // Public Pages
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/Login'
+import DriverLoginPage from './pages/auth/DriverLogin'
 import RegisterPage from './pages/auth/Register'
 import ForgotPasswordPage from './pages/auth/ForgotPassword'
 import ResetPasswordPage from './pages/auth/ResetPassword'
@@ -104,6 +105,7 @@ function App() {
         {/* Auth Routes */}
         <Route path="/auth" element={<PublicLayout />}>
           <Route path="login" element={<LoginPage />} />
+          <Route path="login/driver" element={<DriverLoginPage />} />
           <Route path="register" element={<RegisterPage />} />
           <Route path="forgot-password" element={<ForgotPasswordPage />} />
           <Route path="reset-password" element={<ResetPasswordPage />} />

@@ -129,7 +129,12 @@ export const AuthProvider = ({ children }) => {
         toast.success(`¡Bienvenido, ${normalizedUser.name}!`)
         return { success: true, user: normalizedUser }
       }
-      const response = await authAPI.post('/login', credentials)
+      // Determinar qué endpoint usar según el rol
+      const endpoint = credentials.role === 'driver' ? '/login/driver' : '/login'
+      // No enviar role al backend (el backend lo determina)
+      const { role, ...credentialsWithoutRole } = credentials
+      
+      const response = await authAPI.post(endpoint, credentialsWithoutRole)
       const { user, token } = response.data
 
       setToken(token)
