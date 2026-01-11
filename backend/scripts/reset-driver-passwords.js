@@ -44,7 +44,7 @@ async function resetDriverPasswords() {
     console.log('\n⚠️  ADVERTENCIA: Esto reseteará las contraseñas de TODOS los choferes a "password123"');
     const confirm = await question('\n¿Continuar? (escribe "SI" para confirmar): ');
 
-    if (confirm !== 'SI') {
+    if (confirm.toUpperCase() !== 'SI') {
       console.log('❌ Operación cancelada');
       await mongoose.connection.close();
       rl.close();
