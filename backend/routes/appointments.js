@@ -1218,7 +1218,7 @@ router.put('/:id/accept', auth, async (req, res) => {
     appointment.status = 'assigned';
     
     // Inicializar statusHistory si no existe
-    if (!appointment.statusHistory) {
+    if (!appointment.statusHistory || !Array.isArray(appointment.statusHistory)) {
       appointment.statusHistory = [];
     }
     
@@ -1229,7 +1229,27 @@ router.put('/:id/accept', auth, async (req, res) => {
     });
     
     // Generar código de verificación para el encuentro
-    const pickupCode = appointment.generatePickupCode();
+    let pickupCode;
+    try {
+      // Verificar si el método existe antes de llamarlo
+      if (typeof appointment.generatePickupCode === 'function') {
+        pickupCode = appointment.generatePickupCode();
+      } else {
+        // Si el método no existe, generar código manualmente
+        pickupCode = Math.floor(100000 + Math.random() * 900000).toString();
+        appointment.pickupCode = pickupCode;
+      }
+      
+      if (!pickupCode) {
+        // Fallback si generatePickupCode no retorna valor
+        pickupCode = Math.floor(100000 + Math.random() * 900000).toString();
+        appointment.pickupCode = pickupCode;
+      }
+    } catch (codeError) {
+      logger.warn('Error generando código, usando fallback:', codeError);
+      pickupCode = Math.floor(100000 + Math.random() * 900000).toString();
+      appointment.pickupCode = pickupCode;
+    }
 
     // Marcar driver como no disponible
     if (driver.isOnline !== undefined) {
