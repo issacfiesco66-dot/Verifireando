@@ -14,7 +14,6 @@ import {
   Power,
   Route
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation } from '../../contexts/LocationContext'
 import { useSocket } from '../../contexts/SocketContext'
