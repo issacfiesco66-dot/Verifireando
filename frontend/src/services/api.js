@@ -97,7 +97,7 @@ const createAPIInstance = (baseURL = API_BASE_URL) => {
 export const api = createAPIInstance()
 
 // Specific API instances
-export const authAPI = createAPIInstance(`${API_BASE_URL}/auth`)
+export const authAPI = createAPIInstance(`${API_BASE_URL}/auth`) // Ya incluye /api en API_BASE_URL
 export const userAPI = createAPIInstance(`${API_BASE_URL}/users`)
 export const driverAPI = createAPIInstance(`${API_BASE_URL}/drivers`)
 export const carAPI = createAPIInstance(`${API_BASE_URL}/cars`)
@@ -222,6 +222,7 @@ export const appointmentService = {
   rateAppointment: (id, rating, comment) => appointmentAPI.post(`/${id}/rate`, { rating, comment }),
   getAvailableAppointments: (params) => appointmentAPI.get('/driver/available', { params }),
   acceptAppointment: (id) => appointmentAPI.put(`/${id}/accept`),
+  verifyPickupCode: (id, code) => appointmentAPI.post(`/${id}/verify-pickup-code`, { code }),
   getAppointmentStats: () => appointmentAPI.get('/stats'),
 }
 

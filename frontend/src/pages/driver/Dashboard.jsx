@@ -12,7 +12,8 @@ import {
   AlertCircle,
   XCircle,
   Power,
-  Route
+  Route,
+  RefreshCw
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLocation } from '../../contexts/LocationContext'
@@ -41,8 +42,18 @@ const Dashboard = () => {
   useEffect(() => {
     fetchAppointments()
     checkOnlineStatus()
+  }, [])
+
+  useEffect(() => {
     if (isOnline) {
       fetchAvailableAppointments()
+      // Refrescar citas disponibles cada 30 segundos si está en línea
+      const interval = setInterval(() => {
+        fetchAvailableAppointments()
+      }, 30000)
+      return () => clearInterval(interval)
+    } else {
+      setAvailableAppointments([])
     }
   }, [isOnline])
 
@@ -122,9 +133,20 @@ const Dashboard = () => {
       const response = await appointmentService.getAvailableAppointments()
       const availableData = response.data.appointments || []
       setAvailableAppointments(availableData)
+      
+      if (availableData.length === 0 && isOnline) {
+        // Solo mostrar mensaje si está en línea pero no hay citas (no es un error)
+        console.log('No hay citas disponibles en este momento')
+      }
     } catch (error) {
       console.error('❌ Error fetching available appointments:', error)
-      // No mostrar error si falla, solo no mostrar citas disponibles
+      // Mostrar error al usuario si falla
+      if (error.response?.status === 403) {
+        toast.error('No tienes permisos para ver citas disponibles')
+      } else if (error.response?.status !== 404) {
+        toast.error('Error al cargar citas disponibles. Intenta actualizar.')
+      }
+      setAvailableAppointments([])
     } finally {
       setLoadingAvailable(false)
     }
@@ -147,13 +169,29 @@ const Dashboard = () => {
       }
 
       const newStatus = !isOnline
-      setIsOnline(newStatus)
-      localStorage.setItem('driverOnlineStatus', newStatus.toString())
+      
+      // Sincronizar con el backend
+      try {
+        const { driverService } = await import('../../services/api')
+        await driverService.updateOnlineStatus(user._id, newStatus)
+        
+        setIsOnline(newStatus)
+        localStorage.setItem('driverOnlineStatus', newStatus.toString())
 
-      if (newStatus) {
-        toast.success('Ahora estás en línea')
-      } else {
-        toast.success('Ahora estás fuera de línea')
+        if (newStatus) {
+          toast.success('Ahora estás en línea')
+          // Cargar citas disponibles cuando se conecta
+          fetchAvailableAppointments()
+        } else {
+          toast.success('Ahora estás fuera de línea')
+          setAvailableAppointments([])
+        }
+      } catch (apiError) {
+        console.error('Error actualizando estado en backend:', apiError)
+        // Fallback: actualizar solo localmente si falla el backend
+        setIsOnline(newStatus)
+        localStorage.setItem('driverOnlineStatus', newStatus.toString())
+        toast.warning('Estado actualizado localmente. Verifica tu conexión.')
       }
     } catch (error) {
       toast.error('Error al cambiar el estado')
@@ -295,6 +333,117 @@ const Dashboard = () => {
           </div>
         </div>
 
+        {/* Citas Disponibles (solo si está en línea) - MOSTRAR PRIMERO */}
+        {isOnline && (
+          <div className="bg-white rounded-xl shadow-soft overflow-hidden mb-8">
+            <div className="px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">
+                    🚗 Citas Disponibles
+                  </h2>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Acepta nuevas citas cuando estés en línea
+                  </p>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={fetchAvailableAppointments}
+                    disabled={loadingAvailable}
+                    className="text-primary-600 hover:text-primary-700 text-sm font-medium flex items-center space-x-1"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingAvailable ? 'animate-spin' : ''}`} />
+                    <span>Actualizar</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <div className="p-6">
+              {loadingAvailable ? (
+                <div className="text-center py-8">
+                  <LoadingSpinner />
+                  <p className="text-gray-600 mt-2">Buscando citas disponibles...</p>
+                </div>
+              ) : availableAppointments.length === 0 ? (
+                <div className="text-center py-8">
+                  <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    No hay citas disponibles en este momento
+                  </h3>
+                  <p className="text-gray-600">
+                    Mantente en línea para recibir notificaciones de nuevas citas
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {availableAppointments.map((appointment) => (
+                    <div
+                      key={appointment._id}
+                      className="border-2 border-blue-300 rounded-lg p-4 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition-all shadow-sm"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <User className="w-5 h-5 text-blue-600" />
+                            <p className="font-bold text-gray-900 text-lg">
+                              {appointment.client?.name || 'Cliente'}
+                            </p>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3 flex items-center">
+                            <MapPin className="w-4 h-4 mr-1 text-red-500" />
+                            {appointment.location?.address || appointment.pickupAddress?.street || 'Dirección no disponible'}
+                          </p>
+                          <div className="flex items-center flex-wrap gap-3 text-sm">
+                            <span className="flex items-center text-gray-600">
+                              <Calendar className="w-4 h-4 mr-1" />
+                              {formatDate(appointment.scheduledDate)}
+                            </span>
+                            {appointment.distance && (
+                              <span className="flex items-center text-blue-600 font-medium">
+                                📍 {appointment.distance.toFixed(1)} km de distancia
+                              </span>
+                            )}
+                            {appointment.pricing?.total && (
+                              <span className="flex items-center text-green-600 font-bold">
+                                💰 ${appointment.pricing.total}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end space-y-2 ml-4">
+                          <button
+                            onClick={async () => {
+                              try {
+                                await appointmentService.acceptAppointment(appointment._id)
+                                toast.success('¡Cita aceptada exitosamente!')
+                                fetchAppointments() // Refrescar citas asignadas
+                                fetchAvailableAppointments() // Refrescar disponibles
+                              } catch (error) {
+                                toast.error(error.response?.data?.message || 'Error al aceptar la cita')
+                              }
+                            }}
+                            className="btn btn-success btn-md flex items-center space-x-2 px-6 shadow-lg"
+                          >
+                            <CheckCircle className="w-5 h-5" />
+                            <span>Aceptar</span>
+                          </button>
+                          <Link
+                            to={`/driver/appointments/${appointment._id}`}
+                            className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                          >
+                            Ver detalles →
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Assigned Appointments */}
           <div className="lg:col-span-2">
@@ -302,7 +451,7 @@ const Dashboard = () => {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-semibold text-gray-900">
-                    Citas asignadas
+                    Mis citas asignadas
                   </h2>
                   <Link
                     to="/driver/appointments"
@@ -413,72 +562,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Citas Disponibles (solo si está en línea) */}
-          {isOnline && availableAppointments.length > 0 && (
-            <div className="bg-white rounded-xl shadow-soft overflow-hidden mb-6">
-              <div className="px-6 py-4 border-b border-gray-200 bg-blue-50">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-gray-900">
-                    Citas Disponibles ({availableAppointments.length})
-                  </h2>
-                  <button
-                    onClick={fetchAvailableAppointments}
-                    disabled={loadingAvailable}
-                    className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                  >
-                    Actualizar
-                  </button>
-                </div>
-              </div>
-              
-              <div className="p-6">
-                <div className="space-y-4">
-                  {availableAppointments.map((appointment) => (
-                    <div
-                      key={appointment._id}
-                      className="border border-blue-200 rounded-lg p-4 bg-blue-50 hover:bg-blue-100 transition-colors"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-900 mb-1">
-                            {appointment.client?.name || 'Cliente'}
-                          </p>
-                          <p className="text-sm text-gray-600 mb-2">
-                            📍 {appointment.pickupAddress?.street || 'Dirección no disponible'}
-                          </p>
-                          <div className="flex items-center space-x-4 text-xs text-gray-600">
-                            <span>📅 {formatDate(appointment.scheduledDate)}</span>
-                            {appointment.distance && (
-                              <span>📍 {appointment.distance.toFixed(1)} km</span>
-                            )}
-                            {appointment.pricing?.total && (
-                              <span>💰 ${appointment.pricing.total}</span>
-                            )}
-                          </div>
-                        </div>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await appointmentService.acceptAppointment(appointment._id)
-                              toast.success('Cita aceptada exitosamente')
-                              fetchAppointments() // Refrescar citas asignadas
-                              fetchAvailableAppointments() // Refrescar disponibles
-                            } catch (error) {
-                              toast.error(error.response?.data?.message || 'Error al aceptar la cita')
-                            }
-                          }}
-                          className="btn btn-success btn-sm ml-4 flex items-center space-x-1"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                          <span>Aceptar</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* Quick Actions */}
           <div className="space-y-6">

@@ -303,12 +303,42 @@ router.get('/:id', auth, async (req, res) => {
     
     const appointment = await Appointment.findById(id)
       .populate('client', 'name email phone')
-      .populate('driver', 'name phone vehicleInfo rating location')
-      .populate('car', 'plates brand model color year')
+      .populate('car', 'plates brand model color year make licensePlate vin vehicleType')
       .populate('payment');
     
     if (!appointment) {
       return res.status(404).json({ message: 'Cita no encontrada' });
+    }
+
+    // Si hay driver, poblar desde Driver o User según corresponda
+    if (appointment.driver) {
+      // Intentar buscar en Driver primero (modelo separado)
+      const driverFromDriver = await Driver.findById(appointment.driver).select('name email phone vehicleInfo rating location');
+      if (driverFromDriver) {
+        appointment.driver = {
+          _id: driverFromDriver._id,
+          name: driverFromDriver.name,
+          email: driverFromDriver.email,
+          phone: driverFromDriver.phone,
+          vehicleInfo: driverFromDriver.vehicleInfo,
+          rating: driverFromDriver.rating,
+          location: driverFromDriver.location
+        };
+      } else {
+        // Si no está en Driver, buscar en User (compatibilidad)
+        const driverFromUser = await User.findById(appointment.driver).select('name email phone driverProfile rating location');
+        if (driverFromUser) {
+          appointment.driver = {
+            _id: driverFromUser._id,
+            name: driverFromUser.name,
+            email: driverFromUser.email,
+            phone: driverFromUser.phone,
+            vehicleInfo: driverFromUser.driverProfile?.vehicleInfo,
+            rating: driverFromUser.driverProfile?.rating || driverFromUser.rating,
+            location: driverFromUser.location
+          };
+        }
+      }
     }
 
     // Verificar permisos
@@ -322,7 +352,58 @@ router.get('/:id', auth, async (req, res) => {
       });
     }
 
-    res.json({ appointment });
+    // Transformar pickupAddress a formato location para el frontend
+    const appointmentObj = appointment.toObject();
+    
+    // Transformar pickupAddress a location (ubicación de recogida)
+    if (appointmentObj.pickupAddress?.coordinates?.coordinates) {
+      const [lng, lat] = appointmentObj.pickupAddress.coordinates.coordinates;
+      appointmentObj.location = {
+        address: `${appointmentObj.pickupAddress.street}, ${appointmentObj.pickupAddress.city}, ${appointmentObj.pickupAddress.state}`,
+        latitude: lat,
+        longitude: lng,
+        coordinates: [lng, lat],
+        street: appointmentObj.pickupAddress.street,
+        city: appointmentObj.pickupAddress.city,
+        state: appointmentObj.pickupAddress.state,
+        zipCode: appointmentObj.pickupAddress.zipCode,
+        instructions: appointmentObj.pickupAddress.instructions
+      };
+    }
+    
+    // Transformar deliveryAddress a deliveryLocation (ubicación de entrega)
+    if (appointmentObj.deliveryAddress) {
+      if (appointmentObj.deliveryAddress.coordinates?.coordinates) {
+        // Formato GeoJSON [lng, lat]
+        const [lng, lat] = appointmentObj.deliveryAddress.coordinates.coordinates;
+        appointmentObj.deliveryLocation = {
+          address: `${appointmentObj.deliveryAddress.street || ''}, ${appointmentObj.deliveryAddress.city || ''}, ${appointmentObj.deliveryAddress.state || ''}`,
+          latitude: lat,
+          longitude: lng,
+          coordinates: [lng, lat],
+          street: appointmentObj.deliveryAddress.street,
+          city: appointmentObj.deliveryAddress.city,
+          state: appointmentObj.deliveryAddress.state,
+          zipCode: appointmentObj.deliveryAddress.zipCode,
+          instructions: appointmentObj.deliveryAddress.instructions
+        };
+      } else if (appointmentObj.deliveryAddress.coordinates?.lat && appointmentObj.deliveryAddress.coordinates?.lng) {
+        // Formato simple {lat, lng}
+        appointmentObj.deliveryLocation = {
+          address: `${appointmentObj.deliveryAddress.street || ''}, ${appointmentObj.deliveryAddress.city || ''}, ${appointmentObj.deliveryAddress.state || ''}`,
+          latitude: appointmentObj.deliveryAddress.coordinates.lat,
+          longitude: appointmentObj.deliveryAddress.coordinates.lng,
+          coordinates: [appointmentObj.deliveryAddress.coordinates.lng, appointmentObj.deliveryAddress.coordinates.lat],
+          street: appointmentObj.deliveryAddress.street,
+          city: appointmentObj.deliveryAddress.city,
+          state: appointmentObj.deliveryAddress.state,
+          zipCode: appointmentObj.deliveryAddress.zipCode,
+          instructions: appointmentObj.deliveryAddress.instructions
+        };
+      }
+    }
+
+    res.json({ appointment: appointmentObj });
 
   } catch (error) {
     logger.error('Error obteniendo cita:', error);
@@ -397,7 +478,8 @@ router.post('/', auth, async (req, res) => {
         coordinates: {
           type: 'Point',
           coordinates: [value.deliveryAddress.coordinates.lng, value.deliveryAddress.coordinates.lat] // [longitude, latitude]
-        }
+        },
+        sameAsPickup: value.deliveryAddress.sameAsPickup || false
       }
     };
 
@@ -405,7 +487,11 @@ router.post('/', auth, async (req, res) => {
     delete appointmentData.scheduledTime;
 
     // Crear la cita
-    const appointment = new Appointment(appointmentData);
+    const appointment = new Appointment({
+      ...appointmentData,
+      driver: null, // Asegurar que driver sea null inicialmente
+      status: 'pending' // Asegurar que status sea pending inicialmente
+    });
 
     // Calcular precio total
     appointment.calculateTotal();
@@ -421,6 +507,8 @@ router.post('/', auth, async (req, res) => {
     if (driver) {
       // Asignar chofer automáticamente
       appointment.driver = driver._id;
+      // Generar código de verificación
+      appointment.generatePickupCode();
       appointment.status = 'assigned';
       appointment.statusHistory.push({
         status: 'assigned',
@@ -956,10 +1044,22 @@ router.get('/driver/available', auth, async (req, res) => {
       });
     }
 
-    // Buscar driver en User (todos están en User ahora)
-    const driver = await User.findById(req.userId);
+    // Buscar driver en Driver (modelo separado)
+    const driver = await Driver.findById(req.userId);
     
-    if (!driver || driver.role !== 'driver') {
+    // Si no está en Driver, buscar en User (compatibilidad)
+    let driverLocation = null;
+    let userDriver = null;
+    if (driver) {
+      driverLocation = driver.location;
+    } else {
+      userDriver = await User.findById(req.userId);
+      if (userDriver && userDriver.role === 'driver') {
+        driverLocation = userDriver.location;
+      }
+    }
+
+    if (!driver && !userDriver) {
       return res.json({ appointments: [] });
     }
 
@@ -968,18 +1068,35 @@ router.get('/driver/available', auth, async (req, res) => {
       status: 'pending',
       driver: null // Solo citas sin chofer asignado
     })
-    .populate('client', 'name phone')
-    .populate('car', 'plates brand model color')
+    .populate('client', 'name phone email')
+    .populate('car', 'plates brand model color year')
     .sort({ createdAt: 1 })
     .limit(10);
 
-    // Devolver citas sin cálculo de distancia si no hay ubicación
+    // Transformar y agregar distancia
     const appointmentsWithDistance = appointments.map(appointment => {
+      const appointmentObj = appointment.toObject();
+      
+      // Transformar pickupAddress a location
+      if (appointmentObj.pickupAddress?.coordinates?.coordinates) {
+        const [lng, lat] = appointmentObj.pickupAddress.coordinates.coordinates;
+        appointmentObj.location = {
+          address: `${appointmentObj.pickupAddress.street}, ${appointmentObj.pickupAddress.city}, ${appointmentObj.pickupAddress.state}`,
+          latitude: lat,
+          longitude: lng,
+          coordinates: [lng, lat],
+          street: appointmentObj.pickupAddress.street,
+          city: appointmentObj.pickupAddress.city,
+          state: appointmentObj.pickupAddress.state
+        };
+      }
+      
+      // Calcular distancia si hay ubicación del chofer
       let distance = null;
       try {
-        if (appointment.pickupAddress?.coordinates?.coordinates && driver.location?.coordinates) {
-          const [lng, lat] = appointment.pickupAddress.coordinates.coordinates;
-          const [driverLng, driverLat] = driver.location.coordinates;
+        if (appointmentObj.pickupAddress?.coordinates?.coordinates && driverLocation?.coordinates) {
+          const [lng, lat] = appointmentObj.pickupAddress.coordinates.coordinates;
+          const [driverLng, driverLat] = driverLocation.coordinates;
           // Cálculo simple de distancia (Haversine simplificado)
           const R = 6371; // km
           const dLat = (lat - driverLat) * Math.PI / 180;
@@ -993,8 +1110,9 @@ router.get('/driver/available', auth, async (req, res) => {
       } catch (e) {
         // Ignorar errores de cálculo de distancia
       }
+      
       return {
-        ...appointment.toJSON(),
+        ...appointmentObj,
         distance
       };
     });
@@ -1048,9 +1166,19 @@ router.put('/:id/accept', auth, async (req, res) => {
       timestamp: new Date(),
       notes: 'Cita aceptada por el chofer'
     });
+    
+    // Generar código de verificación para el encuentro
+    const pickupCode = appointment.generatePickupCode();
 
-    // Marcar driver como no disponible
-    await updateDriverAvailability(req.userId, false);
+    // Marcar driver como no disponible (buscar en Driver)
+    const driverModel = await Driver.findById(req.userId);
+    if (driverModel) {
+      driverModel.isAvailable = false;
+      await driverModel.save();
+    } else {
+      // Fallback: buscar en User si no está en Driver
+      await updateDriverAvailability(req.userId, false);
+    }
     
     await appointment.save();
 
@@ -1061,12 +1189,13 @@ router.put('/:id/accept', auth, async (req, res) => {
       type: 'appointment_assigned',
       channel: 'push',
       title: 'Chofer Asignado',
-      message: `${driver.name} ha aceptado tu cita y está en camino`,
+      message: `${driver.name || driver.email} ha aceptado tu cita. Código de verificación: ${pickupCode}`,
       data: {
         appointmentId: appointment._id,
         appointmentNumber: appointment.appointmentNumber,
-        driverName: driver.name,
-        driverPhone: driver.phone,
+        driverName: driver.name || driver.email,
+        driverPhone: driver.phone || '',
+        pickupCode: pickupCode,
         priority: 'high'
       }
     });
