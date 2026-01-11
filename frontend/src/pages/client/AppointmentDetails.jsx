@@ -44,6 +44,7 @@ const AppointmentDetails = () => {
   const [rating, setRating] = useState(0)
   const [review, setReview] = useState('')
   const [submittingReview, setSubmittingReview] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
 
   useEffect(() => {
     fetchAppointment()
@@ -122,6 +123,7 @@ const AppointmentDetails = () => {
       
       setAppointment(prev => ({ ...prev, status: 'cancelled' }))
       setShowCancelModal(false)
+      setCancelReason('')
       toast.success('Cita cancelada exitosamente')
     } catch (error) {
       toast.error(error.response?.data?.message || 'Error al cancelar la cita')
@@ -763,7 +765,10 @@ Mensaje: [Describe tu problema aquí]
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Cancelar cita</h3>
               <button
-                onClick={() => setShowCancelModal(false)}
+                onClick={() => {
+                  setShowCancelModal(false)
+                  setCancelReason('')
+                }}
                 className="p-2 hover:bg-gray-100 rounded-lg"
               >
                 <X className="w-5 h-5" />
@@ -789,7 +794,10 @@ Mensaje: [Describe tu problema aquí]
             
             <div className="flex space-x-3">
               <button
-                onClick={() => setShowCancelModal(false)}
+                onClick={() => {
+                  setShowCancelModal(false)
+                  setCancelReason('')
+                }}
                 className="btn btn-secondary btn-md flex-1"
               >
                 Mantener cita
