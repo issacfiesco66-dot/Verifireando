@@ -12,7 +12,7 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { login } = useAuth()
+  const { login, user } = useAuth()
   const navigate = useNavigate()
 
   const handleChange = (e) => {
@@ -35,7 +35,21 @@ function Login() {
       })
       
       if (result.success) {
-        navigate('/')
+        // Esperar un momento para que el estado se actualice
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Redirigir según el rol del usuario (usar result.user o esperar a que el contexto se actualice)
+        const userRole = result.user?.role || user?.role || 'client'
+        let redirectPath = '/client/dashboard'
+        
+        if (userRole === 'admin') {
+          redirectPath = '/admin/dashboard'
+        } else if (userRole === 'driver') {
+          redirectPath = '/driver/dashboard'
+        }
+        
+        // Usar replace para evitar que el usuario pueda volver atrás
+        navigate(redirectPath, { replace: true })
       } else if (result.needsVerification) {
         navigate('/auth/verify-email', { state: { email: formData.email, userId: result.userId } })
       } else {
@@ -77,7 +91,15 @@ function Login() {
       if (response.ok) {
         localStorage.setItem('token', data.token)
         localStorage.setItem('user', JSON.stringify(data.user))
-        navigate('/')
+        // Redirigir según el rol del usuario
+        const userRole = data.user?.role || 'client'
+        if (userRole === 'admin') {
+          navigate('/admin/dashboard')
+        } else if (userRole === 'driver') {
+          navigate('/driver/dashboard')
+        } else {
+          navigate('/client/dashboard')
+        }
       } else {
         setError(data.message || 'Error al iniciar sesión con Google')
       }
