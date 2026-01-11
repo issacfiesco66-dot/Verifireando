@@ -27,6 +27,7 @@ const Dashboard = () => {
   const { currentLocation, requestLocationPermission } = useLocation()
   const { socket, isConnected, emit } = useSocket()
   const [appointments, setAppointments] = useState([])
+  const [availableAppointments, setAvailableAppointments] = useState([])
   const [stats, setStats] = useState({
     today: 0,
     pending: 0,
@@ -35,11 +36,15 @@ const Dashboard = () => {
   })
   const [isOnline, setIsOnline] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadingAvailable, setLoadingAvailable] = useState(false)
 
   useEffect(() => {
     fetchAppointments()
     checkOnlineStatus()
-  }, [])
+    if (isOnline) {
+      fetchAvailableAppointments()
+    }
+  }, [isOnline])
 
   useEffect(() => {
     if (!socket) return;
@@ -58,8 +63,10 @@ const Dashboard = () => {
     const handleNewAppointmentAvailable = (appointment) => {
       console.log('Nueva cita disponible:', appointment);
       toast.success('¡Hay una nueva cita disponible!', { icon: '🚗' });
-      // Opcional: refrescar lista
-      fetchAppointments();
+      // Refrescar citas disponibles si está en línea
+      if (isOnline) {
+        fetchAvailableAppointments();
+      }
     };
 
     socket.on('appointment-assigned', handleAppointmentAssigned);
@@ -106,6 +113,20 @@ const Dashboard = () => {
       toast.error('Error al cargar las citas')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAvailableAppointments = async () => {
+    try {
+      setLoadingAvailable(true)
+      const response = await appointmentService.getAvailableAppointments()
+      const availableData = response.data.appointments || []
+      setAvailableAppointments(availableData)
+    } catch (error) {
+      console.error('❌ Error fetching available appointments:', error)
+      // No mostrar error si falla, solo no mostrar citas disponibles
+    } finally {
+      setLoadingAvailable(false)
     }
   }
 
@@ -365,7 +386,7 @@ const Dashboard = () => {
                               <span>Aceptar</span>
                             </button>
                           )}
-                          {appointment.status !== 'pending' && appointment.location && (
+                          {appointment.status !== 'pending' && appointment.location?.coordinates && (
                             <button
                               onClick={() => {
                                 const url = `https://www.google.com/maps/dir/?api=1&destination=${appointment.location.coordinates[1]},${appointment.location.coordinates[0]}`
@@ -391,6 +412,73 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+
+          {/* Citas Disponibles (solo si está en línea) */}
+          {isOnline && availableAppointments.length > 0 && (
+            <div className="bg-white rounded-xl shadow-soft overflow-hidden mb-6">
+              <div className="px-6 py-4 border-b border-gray-200 bg-blue-50">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-gray-900">
+                    Citas Disponibles ({availableAppointments.length})
+                  </h2>
+                  <button
+                    onClick={fetchAvailableAppointments}
+                    disabled={loadingAvailable}
+                    className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                  >
+                    Actualizar
+                  </button>
+                </div>
+              </div>
+              
+              <div className="p-6">
+                <div className="space-y-4">
+                  {availableAppointments.map((appointment) => (
+                    <div
+                      key={appointment._id}
+                      className="border border-blue-200 rounded-lg p-4 bg-blue-50 hover:bg-blue-100 transition-colors"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-900 mb-1">
+                            {appointment.client?.name || 'Cliente'}
+                          </p>
+                          <p className="text-sm text-gray-600 mb-2">
+                            📍 {appointment.pickupAddress?.street || 'Dirección no disponible'}
+                          </p>
+                          <div className="flex items-center space-x-4 text-xs text-gray-600">
+                            <span>📅 {formatDate(appointment.scheduledDate)}</span>
+                            {appointment.distance && (
+                              <span>📍 {appointment.distance.toFixed(1)} km</span>
+                            )}
+                            {appointment.pricing?.total && (
+                              <span>💰 ${appointment.pricing.total}</span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await appointmentService.acceptAppointment(appointment._id)
+                              toast.success('Cita aceptada exitosamente')
+                              fetchAppointments() // Refrescar citas asignadas
+                              fetchAvailableAppointments() // Refrescar disponibles
+                            } catch (error) {
+                              toast.error(error.response?.data?.message || 'Error al aceptar la cita')
+                            }
+                          }}
+                          className="btn btn-success btn-sm ml-4 flex items-center space-x-1"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Aceptar</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Quick Actions */}
           <div className="space-y-6">
