@@ -61,15 +61,15 @@ const auth = async (req, res, next) => {
     let role = 'client';
 
     if (email) {
-      const existingDriver = await Driver.findOne({ email }).select('-password');
-      if (existingDriver) {
-        userDoc = existingDriver;
-        role = 'driver';
+      const existingUser = await User.findOne({ email }).select('-password');
+      if (existingUser) {
+        userDoc = existingUser;
+        role = existingUser.role || 'client';
       } else {
-        const existingUser = await User.findOne({ email }).select('-password');
-        if (existingUser) {
-          userDoc = existingUser;
-          role = existingUser.role || 'client';
+        const existingDriver = await Driver.findOne({ email }).select('-password');
+        if (existingDriver) {
+          userDoc = existingDriver;
+          role = 'driver';
         }
       }
     }

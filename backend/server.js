@@ -13,6 +13,7 @@ const driverRoutes = require('./routes/drivers');
 const carRoutes = require('./routes/cars');
 const appointmentRoutes = require('./routes/appointments');
 const paymentRoutes = require('./routes/payments');
+const publicPaymentRoutes = require('./routes/public-payments');
 const notificationRoutes = require('./routes/notifications');
 const serviceRoutes = require('./routes/services');
 
@@ -125,6 +126,7 @@ app.use('/api/drivers', driverRoutes);
 app.use('/api/cars', carRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/public-payments', publicPaymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/services', serviceRoutes);
 

@@ -183,7 +183,7 @@ router.get('/my-notifications', auth, async (req, res) => {
     // Build filter for database query
     const filter = {
       recipient: req.userId,
-      recipientModel: 'User' // All users are now in User model
+      recipientModel: req.userRole === 'driver' ? { $in: ['User', 'Driver'] } : 'User'
     };
     
     // Apply additional filters
@@ -209,7 +209,7 @@ router.get('/my-notifications', auth, async (req, res) => {
     // Count unread notifications
     const unreadCount = await Notification.countDocuments({
       recipient: req.userId,
-      recipientModel: 'User',
+      recipientModel: req.userRole === 'driver' ? { $in: ['User', 'Driver'] } : 'User',
       isRead: false
     });
 
@@ -245,7 +245,7 @@ router.put('/mark-as-read', auth, async (req, res) => {
       {
         _id: { $in: value.notificationIds },
         recipient: req.userId,
-        recipientModel: req.userRole === 'driver' ? 'Driver' : 'User'
+        recipientModel: req.userRole === 'driver' ? { $in: ['User', 'Driver'] } : 'User'
       },
       {
         isRead: true,
@@ -267,10 +267,17 @@ router.put('/mark-as-read', auth, async (req, res) => {
 // Marcar todas las notificaciones como leídas
 router.put('/mark-all-as-read', auth, async (req, res) => {
   try {
-    const result = await Notification.markAllAsRead(
-      req.userId,
-      'User' // Todos los usuarios están en User ahora
-    );
+    if (req.userRole === 'driver') {
+      const resultUser = await Notification.markAllAsRead(req.userId, 'User');
+      const resultDriver = await Notification.markAllAsRead(req.userId, 'Driver');
+      const totalModified = (resultUser.modifiedCount || 0) + (resultDriver.modifiedCount || 0);
+      return res.json({
+        message: `${totalModified} notificaciones marcadas como leídas`,
+        modifiedCount: totalModified
+      });
+    }
+
+    const result = await Notification.markAllAsRead(req.userId, 'User');
 
     res.json({
       message: `${result.modifiedCount} notificaciones marcadas como leídas`,
@@ -289,7 +296,7 @@ router.get('/unread-count', auth, async (req, res) => {
     // Count unread notifications for the current user from database
     const count = await Notification.countDocuments({
       recipient: req.userId,
-      recipientModel: 'User',
+      recipientModel: req.userRole === 'driver' ? { $in: ['User', 'Driver'] } : 'User',
       isRead: false
     });
 
@@ -309,7 +316,7 @@ router.delete('/:id', auth, async (req, res) => {
     const notification = await Notification.findOne({
       _id: id,
       recipient: req.userId,
-      recipientModel: req.userRole === 'driver' ? 'Driver' : 'User'
+      recipientModel: req.userRole === 'driver' ? { $in: ['User', 'Driver'] } : 'User'
     });
     
     if (!notification) {

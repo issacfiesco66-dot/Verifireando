@@ -350,16 +350,30 @@ router.delete('/:id', auth, async (req, res) => {
       });
     }
 
-    // Verificar si tiene citas pendientes
+    // Verificar si tiene citas pendientes o activas
     const Appointment = require('../models/Appointment');
-    const pendingAppointments = await Appointment.countDocuments({
+    const activeAppointments = await Appointment.countDocuments({
       car: id,
-      status: { $in: ['pending', 'assigned', 'driver_enroute', 'picked_up'] }
+      status: { $in: ['pending', 'assigned', 'driver_enroute', 'picked_up', 'in_verification'] }
     });
 
-    if (pendingAppointments > 0) {
+    if (activeAppointments > 0) {
+      // Obtener información de las citas para mostrar en el error
+      const appointmentsInfo = await Appointment.find({
+        car: id,
+        status: { $in: ['pending', 'assigned', 'driver_enroute', 'picked_up', 'in_verification'] }
+      })
+      .select('appointmentNumber status scheduledDate')
+      .limit(5);
+      
       return res.status(400).json({ 
-        message: 'No se puede eliminar el vehículo porque tiene citas pendientes' 
+        message: `No se puede eliminar el vehículo porque tiene ${activeAppointments} cita(s) activa(s)`,
+        activeAppointments: activeAppointments,
+        appointments: appointmentsInfo.map(apt => ({
+          number: apt.appointmentNumber || apt._id,
+          status: apt.status,
+          date: apt.scheduledDate
+        }))
       });
     }
 

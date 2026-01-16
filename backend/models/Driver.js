@@ -31,12 +31,12 @@ const driverSchema = new mongoose.Schema({
   },
   licenseNumber: {
     type: String,
-    required: [true, 'El número de licencia es requerido'],
-    unique: true
+    required: [true, 'El número de licencia es requerido']
+    // unique: true removido para permitir múltiples choferes con misma licencia si es necesario
   },
   licenseExpiry: {
     type: Date,
-    required: [true, 'La fecha de vencimiento de licencia es requerida']
+    required: false // Hacer opcional, se establecerá por defecto si no se proporciona
   },
   vehicleInfo: {
     brand: { type: String, required: false },

@@ -13,7 +13,7 @@ const appointmentSchema = new mongoose.Schema({
   },
   driver: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Driver'
+    ref: 'User'
   },
   appointmentNumber: {
     type: String,
@@ -167,6 +167,10 @@ const appointmentSchema = new mongoose.Schema({
   cancellationReason: String,
   estimatedDuration: Number, // en minutos
   actualDuration: Number,    // en minutos
+  pickupCode: {
+    type: String,
+    default: null // Código de 6 dígitos para que el cliente verifique al chofer
+  },
   isUrgent: {
     type: Boolean,
     default: false
@@ -249,6 +253,13 @@ appointmentSchema.methods.calculateTotal = function() {
   this.pricing.total = total + taxes;
   
   return this.pricing.total;
+};
+
+// Método para generar código de verificación para el encuentro
+appointmentSchema.methods.generatePickupCode = function() {
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  this.pickupCode = code;
+  return code;
 };
 
 // Método para verificar si puede ser cancelada

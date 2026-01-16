@@ -17,7 +17,11 @@ const registerSchema = Joi.object({
   role: Joi.string().valid('client', 'driver').default('client'),
   // Campos opcionales para conductores
   licenseNumber: Joi.string().optional(),
-  licenseExpiry: Joi.date().optional()
+  licenseExpiry: Joi.alternatives().try(
+    Joi.date(),
+    Joi.string().isoDate(),
+    Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/) // Formato YYYY-MM-DD
+  ).optional()
 });
 
 const loginSchema = Joi.object({
@@ -55,6 +59,54 @@ const sendWhatsAppOTP = async (phone, code) => {
   return { success: true, messageId: `mock_${Date.now()}` };
 };
 
+// Helper: buscar chofer en User o migrar desde Driver
+const findOrMigrateDriverByEmail = async (email) => {
+  let user = await User.findOne({ email, role: 'driver' });
+  if (user) return user;
+
+  const driver = await Driver.findOne({ email });
+  if (!driver) return null;
+
+  const driverLocation = driver.location?.coordinates?.length === 2
+    ? { lat: driver.location.coordinates[1], lng: driver.location.coordinates[0] }
+    : undefined;
+
+  await User.findByIdAndUpdate(
+    driver._id,
+    {
+      $set: {
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone,
+        password: driver.password, // ya está hasheada en Driver
+        role: 'driver',
+        isActive: driver.isActive ?? true,
+        isVerified: driver.isVerified ?? false,
+        isOnline: driver.isOnline ?? false,
+        isAvailable: driver.isAvailable ?? false,
+        location: driver.location,
+        verificationCode: driver.verificationCode,
+        verificationCodeExpires: driver.verificationCodeExpires,
+        driverProfile: {
+          licenseNumber: driver.licenseNumber,
+          licenseExpiry: driver.licenseExpiry,
+          isVerifiedDriver: driver.isVerified ?? false,
+          vehicleInfo: driver.vehicleInfo,
+          rating: driver.rating?.average || 0,
+          totalTrips: driver.completedTrips || 0,
+          isOnline: driver.isOnline ?? false,
+          isAvailable: driver.isAvailable ?? false,
+          currentLocation: driverLocation
+        }
+      }
+    },
+    { upsert: true, setDefaultsOnInsert: true }
+  );
+
+  user = await User.findById(driver._id);
+  return user;
+};
+
 // Registro de usuario/chofer
 router.post('/register', async (req, res) => {
   try {
@@ -69,14 +121,21 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    const { name, email, phone, password, role, licenseNumber, licenseExpiry } = value;
+    let { name, email, phone, password, role, licenseNumber, licenseExpiry } = value;
 
     // Si es chofer, validar campos requeridos
     if (role === 'driver') {
-      if (!licenseNumber || !licenseExpiry) {
+      if (!licenseNumber) {
         return res.status(400).json({ 
-          message: 'Número de licencia y fecha de vencimiento son requeridos para choferes' 
+          message: 'Número de licencia es requerido para choferes' 
         });
+      }
+      // licenseExpiry es opcional - si no se proporciona, usar fecha por defecto (1 año desde ahora)
+      if (!licenseExpiry) {
+        licenseExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+      } else if (typeof licenseExpiry === 'string') {
+        // Convertir string a Date si viene como string
+        licenseExpiry = new Date(licenseExpiry);
       }
     }
 
@@ -95,7 +154,7 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // Si es chofer, crear en el modelo Driver
+    // Si es chofer, crear en el modelo User (unificado)
     if (role === 'driver') {
       const driverData = {
         name,
@@ -103,24 +162,48 @@ router.post('/register', async (req, res) => {
         phone,
         password,
         role: 'driver',
-        licenseNumber,
-        licenseExpiry,
         isActive: true,
         isAvailable: false,
         isOnline: false,
-        isVerified: false
+        isVerified: false,
+        driverProfile: {
+          licenseNumber,
+          licenseExpiry,
+          isVerifiedDriver: false,
+          isOnline: false,
+          isAvailable: false
+        }
       };
 
-      const driver = new Driver(driverData);
-      const verificationCode = driver.generateVerificationCode();
-      await driver.save();
+      const driverUser = new User(driverData);
+      const verificationCode = driverUser.generateVerificationCode();
+
+      try {
+        await driverUser.save();
+      } catch (saveError) {
+        logger.error('Error guardando chofer:', saveError);
+        if (saveError.name === 'ValidationError') {
+          const validationErrors = Object.values(saveError.errors).map(err => err.message);
+          return res.status(400).json({ 
+            message: 'Error de validación al crear chofer',
+            errors: validationErrors
+          });
+        }
+        if (saveError.code === 11000) {
+          const field = Object.keys(saveError.keyPattern)[0];
+          return res.status(409).json({ 
+            message: `El ${field === 'email' ? 'email' : field === 'licenseNumber' ? 'número de licencia' : field} ya está registrado`
+          });
+        }
+        throw saveError;
+      }
 
       await sendWhatsAppOTP(phone, verificationCode);
       logger.info(`Chofer registrado: ${email} - Código: ${verificationCode}`);
 
       return res.status(201).json({
         message: 'Chofer registrado exitosamente. Código de verificación enviado por WhatsApp.',
-        userId: driver._id,
+        userId: driverUser._id,
         needsVerification: true,
         devCode: verificationCode
       });
@@ -251,8 +334,8 @@ router.post('/login/driver', async (req, res) => {
     const { email, password } = value;
     logger.info(`Login Chofer intento - Email: ${email}`);
 
-    // Buscar en el modelo Driver
-    const driver = await Driver.findOne({ email });
+    // Buscar en User (modelo unificado) o migrar desde Driver
+    const driver = await findOrMigrateDriverByEmail(email);
     
     if (!driver) {
       logger.error('Login Chofer - Chofer no encontrado');
@@ -289,9 +372,14 @@ router.post('/login/driver', async (req, res) => {
       });
     }
 
-    // Actualizar estado a online y disponible
+    // Actualizar estado a online y disponible (top-level y driverProfile)
     driver.isOnline = true;
     driver.isAvailable = true;
+    if (!driver.driverProfile) {
+      driver.driverProfile = {};
+    }
+    driver.driverProfile.isOnline = true;
+    driver.driverProfile.isAvailable = true;
     await driver.save();
     logger.info(`Chofer ${email} marcado como online y disponible`);
 
@@ -310,8 +398,8 @@ router.post('/login/driver', async (req, res) => {
         role: 'driver',
         isOnline: driver.isOnline,
         isAvailable: driver.isAvailable,
-        rating: driver.rating?.average || 0,
-        licenseNumber: driver.licenseNumber
+        rating: driver.driverProfile?.rating || driver.rating?.average || 0,
+        licenseNumber: driver.driverProfile?.licenseNumber || driver.licenseNumber
       }
     });
 
@@ -334,8 +422,19 @@ router.post('/verify-otp', async (req, res) => {
 
     const { email, code, role } = value;
 
-    // Buscar usuario (todos en el mismo modelo)
-    const user = await User.findOne({ email });
+    // Buscar según el rol
+    let user = null;
+    let userRole = role || 'client';
+
+    if (role === 'driver') {
+      user = await findOrMigrateDriverByEmail(email);
+      userRole = 'driver';
+    } else {
+      user = await User.findOne({ email, role: { $in: ['client', 'admin'] } });
+      if (user) {
+        userRole = user.role;
+      }
+    }
 
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
@@ -354,12 +453,12 @@ router.post('/verify-otp', async (req, res) => {
     user.verificationCodeExpires = undefined;
     await user.save();
 
-    logger.info(`Usuario verificado exitosamente: ${email}`);
+    logger.info(`Usuario verificado exitosamente: ${email} (${userRole})`);
 
     // Generar token
-    const token = generateToken(user, user.role);
+    const token = generateToken(user, userRole);
 
-    logger.info(`OTP verificado: ${email} (${role})`);
+    logger.info(`OTP verificado: ${email} (${userRole})`);
 
     res.json({
       message: 'Verificación exitosa',
@@ -369,8 +468,13 @@ router.post('/verify-otp', async (req, res) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
-        role: role,
-        isVerified: true
+        role: userRole,
+        isVerified: true,
+        ...(userRole === 'driver' && {
+          isOnline: user.isOnline,
+          isAvailable: user.isAvailable,
+          rating: user.driverProfile?.rating || user.rating?.average || 0
+        })
       }
     });
 
@@ -389,8 +493,14 @@ router.post(['/resend-otp', '/resend-verification'], async (req, res) => {
       return res.status(400).json({ message: 'Email requerido' });
     }
 
-    // Todos los usuarios están en el modelo User ahora
-    const user = await User.findOne({ email });
+    // Buscar según el rol
+    let user = null;
+    
+    if (role === 'driver') {
+      user = await findOrMigrateDriverByEmail(email);
+    } else {
+      user = await User.findOne({ email, role: { $in: ['client', 'admin'] } });
+    }
 
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
@@ -406,8 +516,13 @@ router.post(['/resend-otp', '/resend-verification'], async (req, res) => {
 
     // Enviar OTP
     await sendWhatsAppOTP(user.phone, verificationCode);
+    
+    logger.info(`Código OTP reenviado para ${email} (${role}): ${verificationCode}`);
 
-    res.json({ message: 'Código de verificación reenviado' });
+    res.json({ 
+      message: 'Código de verificación reenviado',
+      devCode: verificationCode // Incluir en desarrollo
+    });
 
   } catch (error) {
     logger.error('Error reenviando OTP:', error);

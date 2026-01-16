@@ -148,7 +148,7 @@ router.get('/stats', auth, authorize(['driver']), async (req, res) => {
       {
         $group: {
           _id: null,
-          total: { $sum: '$price' }
+          total: { $sum: '$pricing.total' }
         }
       }
     ]);
@@ -159,8 +159,8 @@ router.get('/stats', auth, authorize(['driver']), async (req, res) => {
       cancelledAppointments,
       monthlyAppointments,
       monthlyEarnings: monthlyEarnings[0]?.total || 0,
-      rating: typeof driver.rating === 'object' ? (driver.rating.average || 0) : (driver.rating || 0),
-      totalRatings: typeof driver.rating === 'object' ? (driver.rating.count || 0) : (driver.totalRatings || 0)
+      rating: driver.driverProfile?.rating ?? (typeof driver.rating === 'object' ? (driver.rating.average || 0) : (driver.rating || 0)),
+      totalRatings: driver.driverProfile?.totalTrips ?? (typeof driver.rating === 'object' ? (driver.rating.count || 0) : (driver.totalRatings || 0))
     });
 
   } catch (error) {
@@ -378,12 +378,63 @@ router.put('/:id/location', auth, async (req, res) => {
       });
     }
 
-    const driver = await Driver.findById(id);
-    if (!driver) {
-      return res.status(404).json({ message: 'Chofer no encontrado' });
+    // Buscar en User (modelo unificado)
+    let driver = await User.findById(id);
+    if (driver && driver.role === 'driver') {
+      driver.location = {
+        type: 'Point',
+        coordinates: [value.lng, value.lat]
+      };
+      if (!driver.driverProfile) {
+        driver.driverProfile = {};
+      }
+      driver.driverProfile.currentLocation = {
+        lat: value.lat,
+        lng: value.lng,
+        lastUpdate: new Date()
+      };
+      await driver.save();
+    } else {
+      // Fallback: buscar en Driver y migrar a User
+      const legacyDriver = await Driver.findById(id);
+      if (!legacyDriver) {
+        return res.status(404).json({ message: 'Chofer no encontrado' });
+      }
+      await legacyDriver.updateLocation(value.lat, value.lng);
+      await User.findByIdAndUpdate(
+        legacyDriver._id,
+        {
+          $set: {
+            name: legacyDriver.name,
+            email: legacyDriver.email,
+            phone: legacyDriver.phone,
+            password: legacyDriver.password,
+            role: 'driver',
+            isActive: legacyDriver.isActive ?? true,
+            isVerified: legacyDriver.isVerified ?? false,
+            isOnline: legacyDriver.isOnline ?? false,
+            isAvailable: legacyDriver.isAvailable ?? false,
+            location: legacyDriver.location,
+            driverProfile: {
+              licenseNumber: legacyDriver.licenseNumber,
+              licenseExpiry: legacyDriver.licenseExpiry,
+              isVerifiedDriver: legacyDriver.isVerified ?? false,
+              vehicleInfo: legacyDriver.vehicleInfo,
+              rating: legacyDriver.rating?.average || 0,
+              totalTrips: legacyDriver.completedTrips || 0,
+              isOnline: legacyDriver.isOnline ?? false,
+              isAvailable: legacyDriver.isAvailable ?? false,
+              currentLocation: {
+                lat: value.lat,
+                lng: value.lng,
+                lastUpdate: new Date()
+              }
+            }
+          }
+        },
+        { upsert: true, setDefaultsOnInsert: true }
+      );
     }
-
-    await driver.updateLocation(value.lat, value.lng);
 
     // Emitir actualización de ubicación via Socket.IO si hay citas activas
     const activeAppointments = await Appointment.find({
@@ -417,15 +468,13 @@ router.put('/:id/location', auth, async (req, res) => {
 });
 
 // Cambiar estado online/offline
-router.put('/:id/online-status', auth, async (req, res) => {
+router.put('/me/online-status', auth, async (req, res) => {
   try {
-    const { id } = req.params;
     const { isOnline } = req.body;
     
-    // Solo el propio chofer puede cambiar su estado
-    if (req.userId !== id) {
+    if (req.userRole !== 'driver') {
       return res.status(403).json({ 
-        message: 'No tienes permisos para cambiar este estado' 
+        message: 'Solo los choferes pueden cambiar su estado online' 
       });
     }
 
@@ -435,28 +484,79 @@ router.put('/:id/online-status', auth, async (req, res) => {
       });
     }
 
-    const driver = await Driver.findByIdAndUpdate(
-      id,
-      { 
-        isOnline,
-        // Si se desconecta, también marcar como no disponible
-        ...(isOnline === false && { isAvailable: false })
-      },
-      { new: true }
-    ).select('-password -bankInfo');
+    // Buscar driver en User (modelo unificado)
+    let driver = await User.findById(req.userId);
+    if (driver && driver.role === 'driver') {
+      driver.isOnline = isOnline;
+      if (!driver.driverProfile) {
+        driver.driverProfile = {};
+      }
+      driver.driverProfile.isOnline = isOnline;
+      if (isOnline === false) {
+        driver.isAvailable = false;
+        driver.driverProfile.isAvailable = false;
+      }
+      await driver.save();
 
-    if (!driver) {
+      return res.json({
+        message: `Estado actualizado a ${isOnline ? 'conectado' : 'desconectado'}`,
+        driver: {
+          id: driver._id,
+          isOnline: driver.isOnline,
+          isAvailable: driver.isAvailable
+        }
+      });
+    }
+
+    // Fallback: buscar en Driver (compatibilidad) y migrar a User
+    const legacyDriver = await Driver.findById(req.userId);
+    if (!legacyDriver) {
       return res.status(404).json({ message: 'Chofer no encontrado' });
     }
 
-    logger.info(`Chofer ${isOnline ? 'conectado' : 'desconectado'}: ${driver.email}`);
+    legacyDriver.isOnline = isOnline;
+    if (isOnline === false) {
+      legacyDriver.isAvailable = false;
+    }
+    await legacyDriver.save();
+
+    await User.findByIdAndUpdate(
+      legacyDriver._id,
+      {
+        $set: {
+          name: legacyDriver.name,
+          email: legacyDriver.email,
+          phone: legacyDriver.phone,
+          password: legacyDriver.password,
+          role: 'driver',
+          isActive: legacyDriver.isActive ?? true,
+          isVerified: legacyDriver.isVerified ?? false,
+          isOnline: legacyDriver.isOnline ?? false,
+          isAvailable: legacyDriver.isAvailable ?? false,
+          location: legacyDriver.location,
+          driverProfile: {
+            licenseNumber: legacyDriver.licenseNumber,
+            licenseExpiry: legacyDriver.licenseExpiry,
+            isVerifiedDriver: legacyDriver.isVerified ?? false,
+            vehicleInfo: legacyDriver.vehicleInfo,
+            rating: legacyDriver.rating?.average || 0,
+            totalTrips: legacyDriver.completedTrips || 0,
+            isOnline: legacyDriver.isOnline ?? false,
+            isAvailable: legacyDriver.isAvailable ?? false
+          }
+        }
+      },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
+
+    logger.info(`Chofer ${isOnline ? 'conectado' : 'desconectado'}: ${legacyDriver.email}`);
 
     res.json({
       message: `Estado actualizado a ${isOnline ? 'conectado' : 'desconectado'}`,
       driver: {
-        id: driver._id,
-        isOnline: driver.isOnline,
-        isAvailable: driver.isAvailable
+        id: legacyDriver._id,
+        isOnline: legacyDriver.isOnline,
+        isAvailable: legacyDriver.isAvailable
       }
     });
 
@@ -467,15 +567,13 @@ router.put('/:id/online-status', auth, async (req, res) => {
 });
 
 // Cambiar disponibilidad
-router.put('/:id/availability', auth, async (req, res) => {
+router.put('/me/availability', auth, async (req, res) => {
   try {
-    const { id } = req.params;
     const { isAvailable } = req.body;
     
-    // Solo el propio chofer puede cambiar su disponibilidad
-    if (req.userId !== id) {
+    if (req.userRole !== 'driver') {
       return res.status(403).json({ 
-        message: 'No tienes permisos para cambiar esta disponibilidad' 
+        message: 'Solo los choferes pueden cambiar su disponibilidad' 
       });
     }
 
@@ -485,27 +583,82 @@ router.put('/:id/availability', auth, async (req, res) => {
       });
     }
 
-    const driver = await Driver.findById(id);
-    if (!driver) {
+    // Buscar driver en User (modelo unificado)
+    let driver = await User.findById(req.userId);
+    if (driver && driver.role === 'driver') {
+      if (isAvailable && !driver.isOnline) {
+        return res.status(400).json({ 
+          message: 'Debes estar conectado para estar disponible' 
+        });
+      }
+
+      driver.isAvailable = isAvailable;
+      if (!driver.driverProfile) {
+        driver.driverProfile = {};
+      }
+      driver.driverProfile.isAvailable = isAvailable;
+      await driver.save();
+
+      return res.json({
+        message: `Disponibilidad actualizada a ${isAvailable ? 'disponible' : 'no disponible'}`,
+        driver: {
+          id: driver._id,
+          isOnline: driver.isOnline,
+          isAvailable: driver.isAvailable
+        }
+      });
+    }
+
+    // Fallback: buscar en Driver (compatibilidad) y migrar a User
+    const legacyDriver = await Driver.findById(req.userId);
+    if (!legacyDriver) {
       return res.status(404).json({ message: 'Chofer no encontrado' });
     }
 
-    // No puede estar disponible si no está online
-    if (isAvailable && !driver.isOnline) {
+    if (isAvailable && !legacyDriver.isOnline) {
       return res.status(400).json({ 
         message: 'Debes estar conectado para estar disponible' 
       });
     }
 
-    driver.isAvailable = isAvailable;
-    await driver.save();
+    legacyDriver.isAvailable = isAvailable;
+    await legacyDriver.save();
+
+    await User.findByIdAndUpdate(
+      legacyDriver._id,
+      {
+        $set: {
+          name: legacyDriver.name,
+          email: legacyDriver.email,
+          phone: legacyDriver.phone,
+          password: legacyDriver.password,
+          role: 'driver',
+          isActive: legacyDriver.isActive ?? true,
+          isVerified: legacyDriver.isVerified ?? false,
+          isOnline: legacyDriver.isOnline ?? false,
+          isAvailable: legacyDriver.isAvailable ?? false,
+          location: legacyDriver.location,
+          driverProfile: {
+            licenseNumber: legacyDriver.licenseNumber,
+            licenseExpiry: legacyDriver.licenseExpiry,
+            isVerifiedDriver: legacyDriver.isVerified ?? false,
+            vehicleInfo: legacyDriver.vehicleInfo,
+            rating: legacyDriver.rating?.average || 0,
+            totalTrips: legacyDriver.completedTrips || 0,
+            isOnline: legacyDriver.isOnline ?? false,
+            isAvailable: legacyDriver.isAvailable ?? false
+          }
+        }
+      },
+      { upsert: true, setDefaultsOnInsert: true }
+    );
 
     res.json({
       message: `Disponibilidad actualizada a ${isAvailable ? 'disponible' : 'no disponible'}`,
       driver: {
-        id: driver._id,
-        isOnline: driver.isOnline,
-        isAvailable: driver.isAvailable
+        id: legacyDriver._id,
+        isOnline: legacyDriver.isOnline,
+        isAvailable: legacyDriver.isAvailable
       }
     });
 

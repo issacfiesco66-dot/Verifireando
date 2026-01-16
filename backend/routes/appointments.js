@@ -28,6 +28,46 @@ async function updateDriverAvailability(driverId, isAvailable) {
   return userResult;
 }
 
+async function upsertUserFromDriver(driver) {
+  if (!driver) return null;
+
+  const driverLocation = driver.location?.coordinates?.length === 2
+    ? { lat: driver.location.coordinates[1], lng: driver.location.coordinates[0] }
+    : undefined;
+
+  await User.findByIdAndUpdate(
+    driver._id,
+    {
+      $set: {
+        name: driver.name,
+        email: driver.email,
+        phone: driver.phone,
+        password: driver.password,
+        role: 'driver',
+        isActive: driver.isActive ?? true,
+        isVerified: driver.isVerified ?? false,
+        isOnline: driver.isOnline ?? false,
+        isAvailable: driver.isAvailable ?? false,
+        location: driver.location,
+        driverProfile: {
+          licenseNumber: driver.licenseNumber,
+          licenseExpiry: driver.licenseExpiry,
+          isVerifiedDriver: driver.isVerified ?? false,
+          vehicleInfo: driver.vehicleInfo,
+          rating: driver.rating?.average || 0,
+          totalTrips: driver.completedTrips || 0,
+          isOnline: driver.isOnline ?? false,
+          isAvailable: driver.isAvailable ?? false,
+          currentLocation: driverLocation
+        }
+      }
+    },
+    { upsert: true, setDefaultsOnInsert: true }
+  );
+
+  return User.findById(driver._id);
+}
+
 // Función auxiliar para calcular hora de fin
 function calculateEndTime(startTime) {
   const [hours, minutes] = startTime.split(':').map(Number);
@@ -104,10 +144,12 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
       let preferredDriver = await User.findOne({
         _id: preferredDriverId,
         role: 'driver',
-        'driverProfile.isOnline': true,
-        'driverProfile.isAvailable': true,
         isVerified: true,
-        isActive: true
+        isActive: true,
+        $and: [
+          { $or: [{ isOnline: true }, { 'driverProfile.isOnline': true }] },
+          { $or: [{ isAvailable: true }, { 'driverProfile.isAvailable': true }] }
+        ]
       });
       
       // Fallback: buscar en Driver (compatibilidad)
@@ -119,6 +161,12 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
           isVerified: true,
           isActive: true
         });
+        if (preferredDriver) {
+          const migrated = await upsertUserFromDriver(preferredDriver);
+          if (migrated) {
+            return migrated;
+          }
+        }
       }
       
       if (preferredDriver) {
@@ -130,10 +178,12 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
     try {
       const availableDrivers = await User.find({
         role: 'driver',
-        'driverProfile.isOnline': true,
-        'driverProfile.isAvailable': true,
         isVerified: true,
         isActive: true,
+        $and: [
+          { $or: [{ isOnline: true }, { 'driverProfile.isOnline': true }] },
+          { $or: [{ isAvailable: true }, { 'driverProfile.isAvailable': true }] }
+        ],
         location: {
           $near: {
             $geometry: {
@@ -156,10 +206,12 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
     // Buscar en User sin filtro geoespacial
     let anyAvailableDrivers = await User.find({
       role: 'driver',
-      'driverProfile.isOnline': true,
-      'driverProfile.isAvailable': true,
       isVerified: true,
-      isActive: true
+      isActive: true,
+      $and: [
+        { $or: [{ isOnline: true }, { 'driverProfile.isOnline': true }] },
+        { $or: [{ isAvailable: true }, { 'driverProfile.isAvailable': true }] }
+      ]
     }).limit(5);
 
     // Fallback: buscar en Driver (compatibilidad con datos antiguos)
@@ -179,7 +231,11 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
 
     // Seleccionar el primer driver disponible
     logger.info('Driver asignado sin filtro geoespacial:', anyAvailableDrivers[0].name);
-    return anyAvailableDrivers[0];
+    if (anyAvailableDrivers[0]?.role === 'driver') {
+      return anyAvailableDrivers[0];
+    }
+    const migrated = await upsertUserFromDriver(anyAvailableDrivers[0]);
+    return migrated || anyAvailableDrivers[0];
   } catch (error) {
     logger.error('Error finding available driver:', error);
     return null;
@@ -217,7 +273,7 @@ router.get('/my-appointments', auth, async (req, res) => {
 
     const appointments = await Appointment.find(filter)
       .populate('client', 'name email phone')
-      .populate('driver', 'name phone vehicleInfo rating')
+      .populate('driver', 'name phone driverProfile.vehicleInfo driverProfile.rating driverProfile.totalTrips isOnline isAvailable')
       .populate('car', 'plates brand model color')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -272,7 +328,7 @@ router.get('/', auth, async (req, res) => {
 
     const appointments = await Appointment.find(filter)
       .populate('client', 'name email phone')
-      .populate('driver', 'name phone vehicleInfo rating')
+      .populate('driver', 'name phone driverProfile.vehicleInfo driverProfile.rating driverProfile.totalTrips isOnline isAvailable')
       .populate('car', 'plates brand model color')
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -310,32 +366,32 @@ router.get('/:id', auth, async (req, res) => {
       return res.status(404).json({ message: 'Cita no encontrada' });
     }
 
-    // Si hay driver, poblar desde Driver o User según corresponda
+    // Si hay driver, poblar desde User o Driver según corresponda
     if (appointment.driver) {
-      // Intentar buscar en Driver primero (modelo separado)
-      const driverFromDriver = await Driver.findById(appointment.driver).select('name email phone vehicleInfo rating location');
-      if (driverFromDriver) {
+      // Intentar buscar en User primero (modelo principal)
+      const driverFromUser = await User.findById(appointment.driver).select('name email phone driverProfile rating location');
+      if (driverFromUser) {
         appointment.driver = {
-          _id: driverFromDriver._id,
-          name: driverFromDriver.name,
-          email: driverFromDriver.email,
-          phone: driverFromDriver.phone,
-          vehicleInfo: driverFromDriver.vehicleInfo,
-          rating: driverFromDriver.rating,
-          location: driverFromDriver.location
+          _id: driverFromUser._id,
+          name: driverFromUser.name,
+          email: driverFromUser.email,
+          phone: driverFromUser.phone,
+          vehicleInfo: driverFromUser.driverProfile?.vehicleInfo,
+          rating: driverFromUser.driverProfile?.rating || driverFromUser.rating,
+          location: driverFromUser.location
         };
       } else {
-        // Si no está en Driver, buscar en User (compatibilidad)
-        const driverFromUser = await User.findById(appointment.driver).select('name email phone driverProfile rating location');
-        if (driverFromUser) {
+        // Fallback: buscar en Driver (compatibilidad)
+        const driverFromDriver = await Driver.findById(appointment.driver).select('name email phone vehicleInfo rating location');
+        if (driverFromDriver) {
           appointment.driver = {
-            _id: driverFromUser._id,
-            name: driverFromUser.name,
-            email: driverFromUser.email,
-            phone: driverFromUser.phone,
-            vehicleInfo: driverFromUser.driverProfile?.vehicleInfo,
-            rating: driverFromUser.driverProfile?.rating || driverFromUser.rating,
-            location: driverFromUser.location
+            _id: driverFromDriver._id,
+            name: driverFromDriver.name,
+            email: driverFromDriver.email,
+            phone: driverFromDriver.phone,
+            vehicleInfo: driverFromDriver.vehicleInfo,
+            rating: driverFromDriver.rating,
+            location: driverFromDriver.location
           };
         }
       }
@@ -566,7 +622,7 @@ router.post('/', auth, async (req, res) => {
       // Enviar notificación al chofer
       await Notification.create({
         recipient: driver._id,
-        recipientModel: 'Driver',
+        recipientModel: 'User',
         type: 'new_appointment',
         channel: 'push',
         title: 'Nueva Cita Asignada',
@@ -586,7 +642,7 @@ router.post('/', auth, async (req, res) => {
     await appointment.save();
     await appointment.populate([
       { path: 'client', select: 'name email phone' },
-      { path: 'driver', select: 'name phone vehicleInfo rating' },
+      { path: 'driver', select: 'name phone driverProfile.vehicleInfo driverProfile.rating driverProfile.totalTrips isOnline isAvailable' },
       { path: 'car', select: 'plates brand model color' }
     ]);
 
@@ -649,7 +705,7 @@ router.put('/:id/status', auth, async (req, res) => {
 
     const appointment = await Appointment.findById(id)
       .populate('client', 'name email phone fcmToken')
-      .populate('driver', 'name phone');
+      .populate('driver', 'name phone driverProfile.vehicleInfo driverProfile.rating isOnline isAvailable');
     
     if (!appointment) {
       return res.status(404).json({ message: 'Cita no encontrada' });
@@ -841,13 +897,16 @@ router.put('/:id/assign-driver', auth, authorize('admin'), async (req, res) => {
     });
 
     driver.isAvailable = false;
+    if (driver.driverProfile) {
+      driver.driverProfile.isAvailable = false;
+    }
     await driver.save();
     await appointment.save();
 
     // Enviar notificación al chofer
     await Notification.create({
       recipient: driverId,
-      recipientModel: 'Driver',
+      recipientModel: 'User',
       type: 'new_appointment',
       channel: 'push',
       title: 'Nueva Cita Asignada',
@@ -890,7 +949,7 @@ router.put('/:id/cancel', auth, async (req, res) => {
 
     const appointment = await Appointment.findById(id)
       .populate('client', 'name email')
-      .populate('driver', 'name email');
+      .populate('driver', 'name email driverProfile.vehicleInfo driverProfile.rating isOnline isAvailable');
     
     if (!appointment) {
       return res.status(404).json({ message: 'Cita no encontrada' });
@@ -935,7 +994,7 @@ router.put('/:id/cancel', auth, async (req, res) => {
       // Notificar al chofer
       await Notification.create({
         recipient: appointment.driver._id,
-        recipientModel: 'Driver',
+        recipientModel: 'User',
         type: 'appointment_cancelled',
         channel: 'push',
         title: 'Cita Cancelada',
@@ -1001,7 +1060,7 @@ router.post('/:id/rating', auth, async (req, res) => {
     }
 
     const appointment = await Appointment.findById(id)
-      .populate('driver', 'name email rating totalRatings');
+      .populate('driver', 'name email driverProfile.rating driverProfile.totalTrips');
     
     if (!appointment) {
       return res.status(404).json({ message: 'Cita no encontrada' });
@@ -1084,22 +1143,21 @@ router.get('/driver/available', auth, async (req, res) => {
       });
     }
 
-    // Buscar driver en Driver (modelo separado)
-    const driver = await Driver.findById(req.userId);
-    
-    // Si no está en Driver, buscar en User (compatibilidad)
+    // Buscar driver en User (modelo principal)
     let driverLocation = null;
-    let userDriver = null;
-    if (driver) {
-      driverLocation = driver.location;
+    let userDriver = await User.findById(req.userId);
+    if (userDriver && userDriver.role === 'driver') {
+      driverLocation = userDriver.location;
     } else {
-      userDriver = await User.findById(req.userId);
-      if (userDriver && userDriver.role === 'driver') {
-        driverLocation = userDriver.location;
+      // Fallback: buscar en Driver y migrar
+      const legacyDriver = await Driver.findById(req.userId);
+      if (legacyDriver) {
+        driverLocation = legacyDriver.location;
+        userDriver = await upsertUserFromDriver(legacyDriver);
       }
     }
 
-    if (!driver && !userDriver) {
+    if (!userDriver) {
       return res.json({ appointments: [] });
     }
 
@@ -1176,14 +1234,13 @@ router.put('/:id/accept', auth, async (req, res) => {
       });
     }
 
-    // Buscar driver en Driver (ahora están en el modelo Driver)
-    let driver = await Driver.findById(req.userId);
-    
-    // Fallback: buscar en User si no está en Driver
-    if (!driver) {
-      const userDriver = await User.findById(req.userId);
-      if (userDriver && userDriver.role === 'driver') {
-        driver = userDriver;
+    // Buscar driver en User (modelo principal)
+    let driver = await User.findById(req.userId);
+    if (!driver || driver.role !== 'driver') {
+      // Fallback: buscar en Driver y migrar
+      const legacyDriver = await Driver.findById(req.userId);
+      if (legacyDriver) {
+        driver = await upsertUserFromDriver(legacyDriver);
       }
     }
     
@@ -1254,6 +1311,9 @@ router.put('/:id/accept', auth, async (req, res) => {
     // Marcar driver como no disponible
     if (driver.isOnline !== undefined) {
       driver.isAvailable = false;
+      if (driver.driverProfile) {
+        driver.driverProfile.isAvailable = false;
+      }
       await driver.save();
     } else {
       // Fallback: usar función auxiliar

@@ -1,0 +1,21 @@
+# COMANDOS PARA EJECUTAR EN TU SERVIDOR EC2
+# Copia y pega estos comandos uno por uno
+
+# 1. Buscar dónde está el proyecto
+find /home -name "server.js" -o -name "app.js" -o -name "app-server.js" 2>/dev/null | grep -v node_modules
+
+# 2. Buscar por package.json
+find /home -name "package.json" 2>/dev/null | grep -v node_modules | head -10
+
+# 3. Ver qué procesos de Node.js están corriendo
+ps aux | grep node
+
+# 4. Ver procesos de PM2
+pm2 list
+
+# 5. Ver todos los directorios en /home/ubuntu
+ls -la /home/ubuntu/
+
+# 6. Buscar en otras ubicaciones comunes
+ls -la /var/www/
+ls -la /opt/
