@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { FcGoogle } from 'react-icons/fc'
 import { useAuth } from '../../contexts/AuthContext'
 
 function DriverLogin() {
@@ -10,8 +11,21 @@ function DriverLogin() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { login, user } = useAuth()
+  const { login, loginWithGoogle, user } = useAuth()
   const navigate = useNavigate()
+
+  // Redirigir si el usuario ya está autenticado
+  useEffect(() => {
+    if (user) {
+      const userRole = user.role || 'driver'
+      const redirectPath = userRole === 'admin' 
+        ? '/admin/dashboard' 
+        : userRole === 'driver' 
+        ? '/driver/dashboard' 
+        : '/client/dashboard'
+      navigate(redirectPath, { replace: true })
+    }
+  }, [user, navigate])
 
   const handleChange = (e) => {
     setFormData({
@@ -34,10 +48,17 @@ function DriverLogin() {
       
       if (result.success) {
         // Esperar un momento para que el estado se actualice
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise(resolve => setTimeout(resolve, 300))
+        
+        // Verificar que el usuario esté en el contexto antes de redirigir
+        const currentUser = result.user || user
+        if (!currentUser) {
+          setError('Error: Usuario no encontrado después del login')
+          return
+        }
         
         // Redirigir al dashboard de chofer
-        const userRole = result.user?.role || user?.role || 'driver'
+        const userRole = currentUser.role || 'driver'
         let redirectPath = '/driver/dashboard'
         
         if (userRole === 'admin') {
@@ -57,6 +78,43 @@ function DriverLogin() {
     }
   }
 
+  const handleGoogleSignIn = async () => {
+    setLoading(true)
+    setError('')
+
+    try {
+      // Pasar rol 'driver' para que el backend cree el usuario como chofer
+      const result = await loginWithGoogle({ role: 'driver' })
+      
+      if (result?.redirect) {
+        // En producción, redirect ya está manejado por Firebase
+        return
+      }
+      
+      if (result.success && result.user) {
+        // Esperar un momento para que el estado se actualice completamente
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // Redirigir según el rol del usuario (debería ser driver)
+        const userRole = result.user?.role || 'driver'
+        const redirectPath = userRole === 'admin' 
+          ? '/admin/dashboard' 
+          : userRole === 'driver' 
+          ? '/driver/dashboard' 
+          : '/client/dashboard'
+        
+        navigate(redirectPath, { replace: true })
+      } else {
+        setError(result.error || 'Error al iniciar sesión con Google')
+      }
+    } catch (err) {
+      console.error('Error signing in with Google:', err)
+      setError('Error al iniciar sesión con Google')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
@@ -66,7 +124,7 @@ function DriverLogin() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             ¿No tienes cuenta?{' '}
-            <Link to="/register?role=driver" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link to="/auth/register?role=driver" className="font-medium text-blue-600 hover:text-blue-500">
               Regístrate como chofer
             </Link>
           </p>
@@ -134,7 +192,7 @@ function DriverLogin() {
             </div>
 
             <div className="text-sm">
-              <Link to="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
+              <Link to="/auth/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>
@@ -148,6 +206,29 @@ function DriverLogin() {
             >
               {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
             </button>
+          </div>
+
+          <div className="mt-6">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300" />
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-gray-50 text-gray-500">O continuar con</span>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <button
+                type="button"
+                onClick={handleGoogleSignIn}
+                disabled={loading}
+                className="w-full flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+              >
+                <FcGoogle className="w-5 h-5 mr-2" />
+                {loading ? 'Conectando...' : 'Continuar con Google'}
+              </button>
+            </div>
           </div>
         </form>
       </div>

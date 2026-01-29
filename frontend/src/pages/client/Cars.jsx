@@ -107,7 +107,22 @@ const Cars = () => {
       setCarToDelete(null)
       toast.success('Vehículo eliminado exitosamente')
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Error al eliminar el vehículo')
+      const errorMessage = error.response?.data?.message || 'Error al eliminar el vehículo'
+      const errorData = error.response?.data
+      
+      // Si hay información sobre citas activas, mostrarla
+      if (errorData?.activeAppointments > 0) {
+        let message = errorMessage
+        if (errorData?.appointments && errorData.appointments.length > 0) {
+          const appointmentsList = errorData.appointments
+            .map(apt => `Cita #${apt.number || 'N/A'} (${apt.status})`)
+            .join(', ')
+          message = `${errorMessage}. Citas afectadas: ${appointmentsList}`
+        }
+        toast.error(message, { duration: 5000 })
+      } else {
+        toast.error(errorMessage)
+      }
     } finally {
       setDeleting(null)
     }
@@ -412,13 +427,14 @@ const Cars = () => {
                 </div>
               </div>
               
-              <p className="text-gray-600">
+              <p className="text-gray-600 mb-4">
                 ¿Estás seguro de que quieres eliminar este vehículo? Esta acción no se puede deshacer.
               </p>
               
               <div className="mt-4 p-3 bg-warning-50 border border-warning-200 rounded-lg">
                 <p className="text-sm text-warning-700">
-                  <strong>Advertencia:</strong> Si eliminas este vehículo, también se cancelarán todas las citas pendientes asociadas a él.
+                  <strong>Advertencia:</strong> No se puede eliminar un vehículo que tenga citas activas (pendientes, asignadas, en camino, recogidas o en verificación). 
+                  Primero debes completar o cancelar las citas asociadas.
                 </p>
               </div>
             </div>

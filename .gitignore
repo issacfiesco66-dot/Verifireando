@@ -139,3 +139,7 @@ public/uploads/
 *service-account*.json
 firebase-adminsdk*.json
 .vercel
+
+# Secrets / credentials
+SECRETS_GENERATED.txt
+CREDENCIALES.txt

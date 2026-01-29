@@ -2,7 +2,7 @@
 # Copia y pega estos comandos uno por uno
 
 # 1. Buscar dónde está el proyecto
-find /home -name "server.js" -o -name "app.js" -o -name "app-server.js" 2>/dev/null | grep -v node_modules
+find /home -name "server.js" -o -name "app.js" 2>/dev/null | grep -v node_modules
 
 # 2. Buscar por package.json
 find /home -name "package.json" 2>/dev/null | grep -v node_modules | head -10

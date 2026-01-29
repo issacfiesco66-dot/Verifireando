@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 const driverSchema = new mongoose.Schema({
   name: {
@@ -158,7 +159,7 @@ driverSchema.methods.comparePassword = async function(candidatePassword) {
 
 // Método para generar código de verificación
 driverSchema.methods.generateVerificationCode = function() {
-  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  const code = crypto.randomInt(100000, 1000000).toString();
   this.verificationCode = code;
   this.verificationCodeExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
   return code;

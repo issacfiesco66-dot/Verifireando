@@ -167,6 +167,9 @@ const AppointmentManagement = () => {
   const calculateDistanceToAppointment = (appointment) => {
     if (!currentLocation || !appointment.location) return null
     
+    if (!appointment.location?.latitude || !appointment.location?.longitude) {
+      return null
+    }
     return calculateDistance(
       currentLocation.latitude,
       currentLocation.longitude,

@@ -138,12 +138,12 @@ const ResetPassword = () => {
                 {...register('password', {
                   required: 'La contraseña es requerida',
                   minLength: {
-                    value: 6,
-                    message: 'La contraseña debe tener al menos 6 caracteres'
+                    value: 8,
+                    message: 'La contraseña debe tener al menos 8 caracteres'
                   },
                   pattern: {
-                    value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-                    message: 'La contraseña debe contener al menos una mayúscula, una minúscula y un número'
+                    value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/,
+                    message: 'Debe incluir mayúscula, minúscula, número y símbolo'
                   }
                 })}
               />

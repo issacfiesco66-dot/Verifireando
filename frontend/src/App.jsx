@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 
 // Layouts
@@ -61,6 +61,12 @@ import NotificationHandler from './components/common/NotificationHandler'
 import NotificationInitializer from './components/common/NotificationInitializer'
 import PWAInstallPrompt from './components/pwa/PWAInstallPrompt'
 
+// Componente para redirigir preservando query params
+const RedirectWithQuery = ({ to }) => {
+  const location = useLocation()
+  return <Navigate to={`${to}${location.search}`} replace />
+}
+
 function App() {
   const { user, loading } = useAuth()
 
@@ -112,6 +118,20 @@ function App() {
           <Route path="reset-password" element={<ResetPasswordPage />} />
           <Route path="verify-email" element={<VerifyEmailPage />} />
         </Route>
+
+        {/* Redirects para compatibilidad con URLs sin /auth - preservar query params */}
+        <Route 
+          path="/register" 
+          element={<RedirectWithQuery to="/auth/register" />} 
+        />
+        <Route 
+          path="/login" 
+          element={<RedirectWithQuery to="/auth/login" />} 
+        />
+        <Route 
+          path="/login/driver" 
+          element={<RedirectWithQuery to="/auth/login/driver" />} 
+        />
 
         {/* Client Routes */}
         <Route

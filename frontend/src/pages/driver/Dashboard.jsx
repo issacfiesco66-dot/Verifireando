@@ -173,7 +173,7 @@ const Dashboard = () => {
       // Sincronizar con el backend
       try {
         const { driverService } = await import('../../services/api')
-        await driverService.updateOnlineStatus(user._id, newStatus)
+        await driverService.updateOnlineStatus(newStatus)
         
         setIsOnline(newStatus)
         localStorage.setItem('driverOnlineStatus', newStatus.toString())

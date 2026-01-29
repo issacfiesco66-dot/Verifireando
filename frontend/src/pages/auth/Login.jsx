@@ -1,8 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { FcGoogle } from 'react-icons/fc'
 import { useAuth } from '../../contexts/AuthContext'
-import { signInWithGoogle } from '../../firebase.new'
 
 function Login() {
   const [formData, setFormData] = useState({
@@ -12,8 +11,21 @@ function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   
-  const { login, user } = useAuth()
+  const { login, loginWithGoogle, user } = useAuth()
   const navigate = useNavigate()
+
+  // Redirigir si el usuario ya está autenticado
+  useEffect(() => {
+    if (user) {
+      const userRole = user.role || 'client'
+      const redirectPath = userRole === 'admin' 
+        ? '/admin/dashboard' 
+        : userRole === 'driver' 
+        ? '/driver/dashboard' 
+        : '/client/dashboard'
+      navigate(redirectPath, { replace: true })
+    }
+  }, [user, navigate])
 
   const handleChange = (e) => {
     setFormData({
@@ -67,41 +79,28 @@ function Login() {
     setError('')
 
     try {
-      const user = await signInWithGoogle()
+      const result = await loginWithGoogle()
       
-      // Enviar el token de Firebase a tu backend
-      const token = await user.getIdToken()
+      if (result?.redirect) {
+        // En producción, redirect ya está manejado por Firebase
+        return
+      }
       
-      // Llamar a tu API para registrar/iniciar sesión con Google
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/auth/google`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          idToken: token,
-          email: user.email,
-          name: user.displayName,
-          photoURL: user.photoURL
-        })
-      })
-
-      const data = await response.json()
-
-      if (response.ok) {
-        localStorage.setItem('token', data.token)
-        localStorage.setItem('user', JSON.stringify(data.user))
+      if (result.success && result.user) {
+        // Esperar un momento para que el estado se actualice completamente
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
         // Redirigir según el rol del usuario
-        const userRole = data.user?.role || 'client'
-        if (userRole === 'admin') {
-          navigate('/admin/dashboard')
-        } else if (userRole === 'driver') {
-          navigate('/driver/dashboard')
-        } else {
-          navigate('/client/dashboard')
-        }
+        const userRole = result.user?.role || 'client'
+        const redirectPath = userRole === 'admin' 
+          ? '/admin/dashboard' 
+          : userRole === 'driver' 
+          ? '/driver/dashboard' 
+          : '/client/dashboard'
+        
+        navigate(redirectPath, { replace: true })
       } else {
-        setError(data.message || 'Error al iniciar sesión con Google')
+        setError(result.error || 'Error al iniciar sesión con Google')
       }
     } catch (err) {
       console.error('Error signing in with Google:', err)
@@ -120,7 +119,7 @@ function Login() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             ¿No tienes cuenta?{' '}
-            <Link to="/register" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link to="/auth/register" className="font-medium text-blue-600 hover:text-blue-500">
               Regístrate
             </Link>
           </p>
@@ -188,7 +187,7 @@ function Login() {
             </div>
 
             <div className="text-sm">
-              <Link to="/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
+              <Link to="/auth/forgot-password" className="font-medium text-blue-600 hover:text-blue-500">
                 ¿Olvidaste tu contraseña?
               </Link>
             </div>

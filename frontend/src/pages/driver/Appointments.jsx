@@ -75,12 +75,12 @@ const Appointments = () => {
 
   const handleAppointmentUpdated = (updatedAppointment) => {
     setAppointments(prev =>
-      prev.map(apt => apt.id === updatedAppointment.id ? updatedAppointment : apt)
+      prev.map(apt => (apt._id === (updatedAppointment._id || updatedAppointment.id)) ? updatedAppointment : apt)
     )
   }
 
   const handleAppointmentCancelled = (appointmentId) => {
-    setAppointments(prev => prev.filter(apt => apt.id !== appointmentId))
+    setAppointments(prev => prev.filter(apt => (apt._id || apt.id) !== appointmentId))
     toast.info('Cita cancelada')
   }
 
@@ -97,10 +97,10 @@ const Appointments = () => {
     // Filter by search term
     if (searchTerm) {
       filtered = filtered.filter(appointment =>
-        appointment.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        appointment.client?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        appointment.vehicle?.licensePlate.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        appointment.location?.address.toLowerCase().includes(searchTerm.toLowerCase())
+        (appointment._id || appointment.id)?.toString().toLowerCase().includes(searchTerm.toLowerCase()) ||
+        appointment.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        appointment.car?.plates?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        appointment.pickupAddress?.street?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -154,9 +154,11 @@ const Appointments = () => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'confirmed':
+      case 'assigned':
         return <CheckCircle className="w-5 h-5 text-success-600" />
-      case 'in_progress':
+      case 'driver_enroute':
+      case 'picked_up':
+      case 'in_verification':
         return <Clock className="w-5 h-5 text-warning-600" />
       case 'completed':
         return <CheckCircle className="w-5 h-5 text-success-600" />
@@ -169,10 +171,14 @@ const Appointments = () => {
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'confirmed':
-        return 'Confirmada'
-      case 'in_progress':
-        return 'En progreso'
+      case 'assigned':
+        return 'Asignada'
+      case 'driver_enroute':
+        return 'Chofer en camino'
+      case 'picked_up':
+        return 'Vehículo recogido'
+      case 'in_verification':
+        return 'En verificación'
       case 'completed':
         return 'Completada'
       case 'cancelled':
@@ -184,9 +190,11 @@ const Appointments = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'confirmed':
+      case 'assigned':
         return 'bg-success-100 text-success-800'
-      case 'in_progress':
+      case 'driver_enroute':
+      case 'picked_up':
+      case 'in_verification':
         return 'bg-warning-100 text-warning-800'
       case 'completed':
         return 'bg-success-100 text-success-800'
@@ -214,15 +222,22 @@ const Appointments = () => {
   }
 
   const openNavigation = (appointment) => {
-    // Verificar que pickupAddress exista y tenga coordenadas
-    if (!appointment.pickupAddress || !appointment.pickupAddress.coordinates) {
-      toast.error('No hay coordenadas disponibles para esta cita')
+    // Usar GeoJSON [lng, lat] si existe, si no, fallback a deliveryAddress lat/lng
+    const geo = appointment.pickupAddress?.coordinates?.coordinates
+    if (Array.isArray(geo) && geo.length === 2) {
+      const [lng, lat] = geo
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      window.open(url, '_blank')
       return
     }
-    
-    const { coordinates } = appointment.pickupAddress
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${coordinates.lat},${coordinates.lng}`
-    window.open(url, '_blank')
+    const lat = appointment.deliveryAddress?.coordinates?.lat
+    const lng = appointment.deliveryAddress?.coordinates?.lng
+    if (lat && lng) {
+      const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      window.open(url, '_blank')
+      return
+    }
+    toast.error('No hay coordenadas disponibles para esta cita')
   }
 
   const clearFilters = () => {
@@ -336,7 +351,7 @@ const Appointments = () => {
               <div className="space-y-6">
                 {filteredAppointments.map((appointment) => (
                   <div
-                    key={appointment.id}
+                    key={appointment._id || appointment.id}
                     className="bg-white rounded-xl shadow-soft p-6 hover:shadow-md transition-shadow"
                   >
                     {/* Header */}
@@ -345,7 +360,7 @@ const Appointments = () => {
                         {getStatusIcon(appointment.status)}
                         <div>
                           <h3 className="font-semibold text-gray-900">
-                            Cita #{appointment.id}
+                            Cita #{appointment.appointmentNumber || (appointment._id || appointment.id)}
                           </h3>
                           <p className="text-sm text-gray-500">
                             {formatDate(appointment.scheduledDate)}
@@ -391,13 +406,13 @@ const Appointments = () => {
                         </h4>
                         <div className="space-y-2">
                           <p className="font-medium text-gray-900">
-                            {appointment.vehicle?.make} {appointment.vehicle?.model} {appointment.vehicle?.year}
+                            {appointment.car?.brand} {appointment.car?.model} {appointment.car?.year}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Placa: {appointment.vehicle?.licensePlate}
+                            Placas: {appointment.car?.plates}
                           </p>
                           <p className="text-sm text-gray-600">
-                            Color: {appointment.vehicle?.color}
+                            Color: {appointment.car?.color}
                           </p>
                         </div>
                       </div>
@@ -410,11 +425,11 @@ const Appointments = () => {
                         </h4>
                         <div className="space-y-2">
                           <p className="text-sm text-gray-600">
-                            {appointment.location?.address}
+                            {appointment.pickupAddress?.street}
                           </p>
-                          {appointment.location?.notes && (
+                          {appointment.notes && (
                             <p className="text-sm text-gray-500 italic">
-                              Notas: {appointment.location.notes}
+                              Notas: {appointment.notes}
                             </p>
                           )}
                         </div>

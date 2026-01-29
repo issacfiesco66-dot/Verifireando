@@ -92,36 +92,48 @@ const Profile = () => {
     try {
       setLoading(true)
       
-      // Simplificar para evitar bucles - solo datos básicos
-      const statsResponse = await driverService.getStats()
-      setDriverStats(statsResponse.data)
-      
-      const vehicleResponse = await driverService.getVehicle()
-      setVehicle(vehicleResponse.data)
-      
-      // Resetear formularios solo una vez
-      if (user && !personalForm.formState.isDirty) {
-        personalForm.reset({
-          name: user.name || '',
-          email: user.email || '',
-          phone: user.phone || '',
-          address: user.address || '',
-          emergencyContact: user.emergencyContact || '',
-          emergencyPhone: user.emergencyPhone || ''
-        })
+      // Cargar estadísticas del driver
+      try {
+        const statsResponse = await driverService.getStats()
+        setDriverStats(statsResponse.data)
+      } catch (statsError) {
+        logger.warn('Error cargando estadísticas:', statsError)
+        // Continuar sin estadísticas
       }
       
-      if (vehicleResponse.data && !vehicleForm.formState.isDirty) {
-        vehicleForm.reset({
-          make: vehicleResponse.data.make || '',
-          model: vehicleResponse.data.model || '',
-          year: vehicleResponse.data.year || '',
-          licensePlate: vehicleResponse.data.licensePlate || '',
-          color: vehicleResponse.data.color || '',
-          type: vehicleResponse.data.type || ''
-        })
+      // Cargar perfil del usuario desde authService
+      try {
+        const profileResponse = await authService.getProfile()
+        const profileData = profileResponse.data
+        updateUser({ ...user, ...profileData })
+        
+        // Resetear formulario con datos reales
+        if (!personalForm.formState.isDirty) {
+          personalForm.reset({
+            name: profileData.name || user.name || '',
+            email: profileData.email || user.email || '',
+            phone: profileData.phone || user.phone || '',
+            address: profileData.address || user.address || '',
+            emergencyContact: profileData.emergencyContact || user.emergencyContact || '',
+            emergencyPhone: profileData.emergencyPhone || user.emergencyPhone || ''
+          })
+        }
+      } catch (profileError) {
+        logger.warn('Error cargando perfil, usando datos del contexto:', profileError)
+        // Si falla, usar datos del contexto
+        if (user && !personalForm.formState.isDirty) {
+          personalForm.reset({
+            name: user.name || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            address: user.address || '',
+            emergencyContact: user.emergencyContact || '',
+            emergencyPhone: user.emergencyPhone || ''
+          })
+        }
       }
     } catch (error) {
+      console.error('Error al cargar datos del perfil:', error)
       toast.error('Error al cargar datos del perfil')
     } finally {
       setLoading(false)
@@ -167,11 +179,13 @@ const Profile = () => {
 
   const updatePersonalInfo = async (data) => {
     try {
-      const response = await userService.updateProfile(data)
-      updateUser(response.data)
+      const response = await authService.updateProfile(data)
+      updateUser({ ...user, ...response.data })
       toast.success('Información personal actualizada')
+      // Recargar datos para asegurar sincronización
+      await fetchProfileData()
     } catch (error) {
-      toast.error('Error al actualizar la información')
+      toast.error(error.response?.data?.message || 'Error al actualizar la información')
     }
   }
 
@@ -182,14 +196,14 @@ const Profile = () => {
     }
 
     try {
-      await userService.changePassword({
+      await authService.changePassword({
         currentPassword: data.currentPassword,
         newPassword: data.newPassword
       })
       securityForm.reset()
       toast.success('Contraseña actualizada')
     } catch (error) {
-      toast.error('Error al cambiar la contraseña')
+      toast.error(error.response?.data?.message || 'Error al cambiar la contraseña')
     }
   }
 

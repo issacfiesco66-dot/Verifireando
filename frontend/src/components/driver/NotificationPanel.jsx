@@ -53,7 +53,7 @@ const NotificationPanel = ({ className = "" }) => {
       
       // Filter appointments within reasonable distance (e.g., 20km)
       const nearbyAppointments = appointments.filter(appointment => {
-        if (!currentLocation || !appointment.location) return true
+        if (!currentLocation || !appointment.location?.latitude || !appointment.location?.longitude) return true
         
         const distance = calculateDistance(
           currentLocation.latitude,
@@ -75,7 +75,7 @@ const NotificationPanel = ({ className = "" }) => {
     const appointment = event.detail
     
     // Check if appointment is within reasonable distance
-    if (currentLocation && appointment.location) {
+    if (currentLocation && appointment.location?.latitude && appointment.location?.longitude) {
       const distance = calculateDistance(
         currentLocation.latitude,
         currentLocation.longitude,
@@ -188,7 +188,7 @@ const NotificationPanel = ({ className = "" }) => {
   }
 
   const formatDistance = (appointment) => {
-    if (!currentLocation || !appointment.location) return ''
+    if (!currentLocation || !appointment.location?.latitude || !appointment.location?.longitude) return ''
     
     const distance = calculateDistance(
       currentLocation.latitude,

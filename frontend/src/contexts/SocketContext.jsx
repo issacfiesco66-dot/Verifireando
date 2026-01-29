@@ -28,12 +28,10 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL?.replace('/api', '') || '';
-    
-    if (!socketUrl) {
-      console.warn('Socket URL not configured');
-      return;
-    }
+    const socketUrl = (
+      import.meta.env.VITE_SOCKET_URL
+      || (import.meta.env.DEV ? 'http://localhost:5000' : (import.meta.env.VITE_API_URL?.replace('/api', '') || window.location.origin))
+    );
 
     const newSocket = io(socketUrl, {
       auth: { token },
@@ -48,12 +46,12 @@ export const SocketProvider = ({ children }) => {
       setIsConnected(true);
       
       // Unirse a la sala del usuario automáticamente
-      if (user?._id) {
-        newSocket.emit('join-user-room', user._id);
-        
+      const uid = user?._id || user?.id;
+      if (uid) {
+        newSocket.emit('join-user-room', uid);
         // Si es chofer, unirse también a la sala de chofer
         if (user.role === 'driver') {
-          newSocket.emit('join-driver-room', user._id);
+          newSocket.emit('join-driver-room', uid);
         }
       }
     });

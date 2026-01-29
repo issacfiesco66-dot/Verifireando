@@ -1,19 +1,26 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const Joi = require('joi');
+const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Driver = require('../models/Driver');
 const { auth } = require('../middleware/auth');
+const { verifyFirebaseIdToken } = require('../config/firebase');
 const logger = require('../utils/logger');
 
 const router = express.Router();
 
 // Esquemas de validación
+const passwordSchema = Joi.string()
+  .min(8)
+  .pattern(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/)
+  .message('La contraseña debe tener al menos 8 caracteres e incluir mayúsculas, minúsculas, número y símbolo');
+
 const registerSchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
   email: Joi.string().email().required(),
   phone: Joi.string().pattern(/^(\+52)?[0-9]{10}$/).required(),
-  password: Joi.string().min(6).required(),
+  password: passwordSchema.required(),
   role: Joi.string().valid('client', 'driver').default('client'),
   // Campos opcionales para conductores
   licenseNumber: Joi.string().optional(),
@@ -37,9 +44,10 @@ const verifyOTPSchema = Joi.object({
 
 // Función para generar JWT
 const generateToken = (user, role) => {
-  const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-  logger.info(`JWT: Using secret: ${secret}`);
-  logger.info(`JWT: Secret length: ${secret.length}`);
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error('JWT_SECRET no configurada');
+  }
   
   return jwt.sign(
     { 
@@ -51,6 +59,24 @@ const generateToken = (user, role) => {
     { expiresIn: '7d' }
   );
 };
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.AUTH_RATE_LIMIT_MAX_REQUESTS
+    ? parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS, 10)
+    : 10,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const otpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.OTP_RATE_LIMIT_MAX_REQUESTS
+    ? parseInt(process.env.OTP_RATE_LIMIT_MAX_REQUESTS, 10)
+    : 5,
+  standardHeaders: true,
+  legacyHeaders: false
+});
 
 // Función mock para enviar WhatsApp OTP
 const sendWhatsAppOTP = async (phone, code) => {
@@ -108,7 +134,7 @@ const findOrMigrateDriverByEmail = async (email) => {
 };
 
 // Registro de usuario/chofer
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     logger.info('Registro - Datos recibidos:', { role: req.body.role, email: req.body.email });
     
@@ -201,12 +227,15 @@ router.post('/register', async (req, res) => {
       await sendWhatsAppOTP(phone, verificationCode);
       logger.info(`Chofer registrado: ${email} - Código: ${verificationCode}`);
 
-      return res.status(201).json({
+      const responsePayload = {
         message: 'Chofer registrado exitosamente. Código de verificación enviado por WhatsApp.',
         userId: driverUser._id,
-        needsVerification: true,
-        devCode: verificationCode
-      });
+        needsVerification: true
+      };
+      if (process.env.NODE_ENV === 'development') {
+        responsePayload.devCode = verificationCode;
+      }
+      return res.status(201).json(responsePayload);
     }
 
     // Si es cliente, crear en el modelo User
@@ -227,12 +256,15 @@ router.post('/register', async (req, res) => {
     await sendWhatsAppOTP(phone, verificationCode);
     logger.info(`Cliente registrado: ${email} - Código: ${verificationCode}`);
 
-    res.status(201).json({
+    const responsePayload = {
       message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp.',
       userId: user._id,
-      needsVerification: true,
-      devCode: verificationCode
-    });
+      needsVerification: true
+    };
+    if (process.env.NODE_ENV === 'development') {
+      responsePayload.devCode = verificationCode;
+    }
+    res.status(201).json(responsePayload);
 
   } catch (error) {
     logger.error('Error en registro:', error);
@@ -241,7 +273,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login para clientes (solo busca en User con role='client')
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { error, value } = loginSchema.validate(req.body);
     if (error) {
@@ -270,9 +302,7 @@ router.post('/login', async (req, res) => {
     logger.info(`Login Cliente - Usuario encontrado con rol: ${userRole}`);
 
     // Verificar contraseña
-    logger.info('Verificando contraseña...');
     const isValidPassword = await user.comparePassword(password);
-    logger.info(`Contraseña válida: ${isValidPassword}`);
     if (!isValidPassword) {
       logger.error('Login Cliente - Contraseña inválida');
       return res.status(401).json({ message: 'Credenciales inválidas' });
@@ -289,12 +319,15 @@ router.post('/login', async (req, res) => {
       await user.save();
       await sendWhatsAppOTP(user.phone, verificationCode);
       logger.info(`Código OTP generado para ${email}: ${verificationCode}`);
-      return res.status(403).json({ 
+      const responsePayload = { 
         message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
         needsVerification: true,
-        userId: user._id,
-        devCode: verificationCode
-      });
+        userId: user._id
+      };
+      if (process.env.NODE_ENV === 'development') {
+        responsePayload.devCode = verificationCode;
+      }
+      return res.status(403).json(responsePayload);
     }
 
     // Generar token
@@ -320,7 +353,7 @@ router.post('/login', async (req, res) => {
 });
 
 // Login para choferes (busca en Driver)
-router.post('/login/driver', async (req, res) => {
+router.post('/login/driver', authLimiter, async (req, res) => {
   try {
     const { error, value } = loginSchema.validate(req.body);
     if (error) {
@@ -345,9 +378,7 @@ router.post('/login/driver', async (req, res) => {
     logger.info(`Login Chofer - Chofer encontrado: ${driver.email}`);
 
     // Verificar contraseña
-    logger.info('Verificando contraseña...');
     const isValidPassword = await driver.comparePassword(password);
-    logger.info(`Contraseña válida: ${isValidPassword}`);
     if (!isValidPassword) {
       logger.error('Login Chofer - Contraseña inválida');
       return res.status(401).json({ message: 'Credenciales inválidas' });
@@ -364,12 +395,15 @@ router.post('/login/driver', async (req, res) => {
       await driver.save();
       await sendWhatsAppOTP(driver.phone, verificationCode);
       logger.info(`Código OTP generado para ${email}: ${verificationCode}`);
-      return res.status(403).json({ 
+      const responsePayload = { 
         message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
         needsVerification: true,
-        userId: driver._id,
-        devCode: verificationCode
-      });
+        userId: driver._id
+      };
+      if (process.env.NODE_ENV === 'development') {
+        responsePayload.devCode = verificationCode;
+      }
+      return res.status(403).json(responsePayload);
     }
 
     // Actualizar estado a online y disponible (top-level y driverProfile)
@@ -410,7 +444,7 @@ router.post('/login/driver', async (req, res) => {
 });
 
 // Verificar OTP
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otp', otpLimiter, async (req, res) => {
   try {
     const { error, value } = verifyOTPSchema.validate(req.body);
     if (error) {
@@ -485,7 +519,7 @@ router.post('/verify-otp', async (req, res) => {
 });
 
 // Reenviar OTP (con alias para compatibilidad)
-router.post(['/resend-otp', '/resend-verification'], async (req, res) => {
+router.post(['/resend-otp', '/resend-verification'], otpLimiter, async (req, res) => {
   try {
     const { email, role = 'client' } = req.body;
 
@@ -519,10 +553,11 @@ router.post(['/resend-otp', '/resend-verification'], async (req, res) => {
     
     logger.info(`Código OTP reenviado para ${email} (${role}): ${verificationCode}`);
 
-    res.json({ 
-      message: 'Código de verificación reenviado',
-      devCode: verificationCode // Incluir en desarrollo
-    });
+    const responsePayload = { message: 'Código de verificación reenviado' };
+    if (process.env.NODE_ENV === 'development') {
+      responsePayload.devCode = verificationCode;
+    }
+    res.json(responsePayload);
 
   } catch (error) {
     logger.error('Error reenviando OTP:', error);
@@ -589,9 +624,10 @@ router.put('/change-password', auth, async (req, res) => {
       });
     }
 
-    if (newPassword.length < 6) {
+    const { error: pwdError } = passwordSchema.validate(newPassword);
+    if (pwdError) {
       return res.status(400).json({ 
-        message: 'La nueva contraseña debe tener al menos 6 caracteres' 
+        message: pwdError.message || 'La nueva contraseña no cumple los requisitos de seguridad'
       });
     }
 
@@ -619,7 +655,7 @@ router.put('/change-password', auth, async (req, res) => {
 });
 
 // Google Sign-In
-router.post('/google', async (req, res) => {
+router.post('/google', authLimiter, async (req, res) => {
   try {
     const { idToken, email, name, photoURL } = req.body;
 
@@ -627,6 +663,9 @@ router.post('/google', async (req, res) => {
       return res.status(400).json({ 
         message: 'Email es requerido' 
       });
+    }
+    if (!idToken) {
+      return res.status(400).json({ message: 'Token de Google requerido' });
     }
 
     // Validar formato de email
@@ -639,10 +678,13 @@ router.post('/google', async (req, res) => {
 
     logger.info(`Google sign-in attempt: ${email}`);
 
-    // SEGURIDAD: En lugar de verificar tokens con Firebase Admin (que requiere claves de servicio),
-    // confiamos en la autenticación de Firebase del lado del cliente.
-    // Firebase ya validó la identidad del usuario antes de enviar el token.
-    // Aquí solo validamos que los datos sean consistentes y creamos/actualizamos el usuario.
+    const decoded = await verifyFirebaseIdToken(idToken);
+    if (!decoded || !decoded.email) {
+      return res.status(401).json({ message: 'Token de Google inválido' });
+    }
+    if (decoded.email !== email) {
+      return res.status(401).json({ message: 'Email no coincide con el token' });
+    }
     
     // Validación adicional: verificar que el nombre y email sean consistentes
     if (name && name.length > 100) {
@@ -657,18 +699,33 @@ router.post('/google', async (req, res) => {
     let user = await User.findOne({ email });
     
     if (!user) {
+      // Validar rol si se proporciona
+      const validRoles = ['client', 'driver', 'admin'];
+      const userRole = role && validRoles.includes(role) ? role : 'client';
+      
       // Crear nuevo usuario si no existe
       user = new User({
         name: name || email.split('@')[0],
         email,
         phone: '+520000000000', // Teléfono por defecto, debe ser actualizado
         password: 'google_oauth_user', // Contraseña placeholder
-        role: 'client',
+        role: userRole,
         isActive: true,
         isVerified: true, // Los usuarios de Google se consideran verificados
         authProvider: 'google',
         photoURL: photoURL || null
       });
+      
+      // Si es driver, agregar campos básicos del driverProfile
+      if (userRole === 'driver') {
+        user.driverProfile = {
+          isVerifiedDriver: false,
+          rating: 0,
+          totalTrips: 0,
+          isOnline: false,
+          isAvailable: false
+        };
+      }
       
       await user.save();
       logger.info(`New Google user created: ${email}`);
@@ -689,7 +746,7 @@ router.post('/google', async (req, res) => {
         email: user.email, 
         role: user.role 
       },
-      process.env.JWT_SECRET || 'fallback-secret-key',
+      process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
 

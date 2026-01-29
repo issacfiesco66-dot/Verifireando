@@ -14,7 +14,7 @@ import {
   Trash2
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { publicPaymentService } from '../../services/api'
+import { paymentService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
@@ -41,32 +41,12 @@ const Payments = () => {
   const fetchPayments = async () => {
     try {
       setLoading(true)
-      const response = await publicPaymentService.getMyPayments()
+      const response = await paymentService.getMyPayments()
       setPayments(response.data.payments || [])
     } catch (error) {
       console.error('Error al cargar pagos:', error)
-      // No mostrar toast de error para no molestar al usuario
-      // Usar datos de muestra como fallback
-      setPayments([
-        {
-          _id: '1',
-          appointmentNumber: 'APT-001',
-          amount: 1500,
-          status: 'completed',
-          method: 'credit_card',
-          createdAt: new Date('2025-12-20'),
-          description: 'Verificación vehicular completa'
-        },
-        {
-          _id: '2', 
-          appointmentNumber: 'APT-002',
-          amount: 800,
-          status: 'pending',
-          method: 'cash',
-          createdAt: new Date('2025-12-22'),
-          description: 'Cambio de aceite y filtros'
-        }
-      ])
+      toast.error('Error al cargar pagos')
+      setPayments([])
     } finally {
       setLoading(false)
     }
@@ -74,31 +54,12 @@ const Payments = () => {
 
   const fetchPaymentMethods = async () => {
     try {
-      const response = await publicPaymentService.getPaymentMethods()
+      const response = await paymentService.getPaymentMethods()
       setPaymentMethods(response.data || [])
     } catch (error) {
       console.error('Error al cargar métodos de pago:', error)
-      // Usar datos de muestra como fallback
-      setPaymentMethods([
-        {
-          _id: 'pm_1',
-          type: 'card',
-          brand: 'visa',
-          last4: '4242',
-          expiryMonth: 12,
-          expiryYear: 2025,
-          isDefault: true
-        },
-        {
-          _id: 'pm_2',
-          type: 'card',
-          brand: 'mastercard',
-          last4: '5555',
-          expiryMonth: 8,
-          expiryYear: 2024,
-          isDefault: false
-        }
-      ])
+      toast.error('Error al cargar métodos de pago')
+      setPaymentMethods([])
     }
   }
 

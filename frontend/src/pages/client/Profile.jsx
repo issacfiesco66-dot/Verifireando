@@ -181,7 +181,7 @@ const Profile = () => {
   const resendVerificationEmail = async () => {
     try {
       setLoading(true)
-      await userService.resendVerificationEmail()
+      await userService.resendVerificationEmail(user?.email, user?.role || 'client')
       toast.success('Email de verificación enviado')
     } catch (error) {
       toast.error('Error al enviar el email de verificación')

@@ -213,12 +213,14 @@ const MapComponent = ({
           </div>
         `)
 
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat([driver.location.longitude, driver.location.latitude])
-        .setPopup(popup)
-        .addTo(map.current)
+      if (driver.location?.longitude && driver.location?.latitude) {
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([driver.location.longitude, driver.location.latitude])
+          .setPopup(popup)
+          .addTo(map.current)
 
-      markersRef.current.push(marker)
+        markersRef.current.push(marker)
+      }
     })
   }, [mapLoaded, showDrivers, driverLocations])
 

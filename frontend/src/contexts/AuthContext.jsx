@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect } from 'react'
 import { authAPI } from '../services/api'
 import { toast } from 'react-hot-toast'
 import { auth } from '../firebase'
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile as fbUpdateProfile, sendEmailVerification, sendPasswordResetEmail, confirmPasswordReset, applyActionCode, signInWithPopup, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth'
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile as fbUpdateProfile, sendEmailVerification, sendPasswordResetEmail, confirmPasswordReset, applyActionCode, signInWithPopup, GoogleAuthProvider, signInWithRedirect, getRedirectResult } from 'firebase/auth'
 const useFirebaseAuth = import.meta.env.VITE_USE_FIREBASE_AUTH === 'true'
 
 const AuthContext = createContext()
@@ -49,6 +49,59 @@ export const AuthProvider = ({ children }) => {
   // Initialize auth state
   useEffect(() => {
     const initAuth = async () => {
+      // Manejar Google Auth redirect en producción (antes de verificar useFirebaseAuth)
+      if (!useFirebaseAuth) {
+        try {
+          // Verificar si hay un resultado de redirect de Google
+          const result = await getRedirectResult(auth)
+          if (result?.user) {
+            const user = result.user
+            const idToken = await user.getIdToken()
+            
+            // Recuperar el rol guardado en sessionStorage si existe
+            const savedRole = sessionStorage.getItem('google_signup_role')
+            if (savedRole) {
+              sessionStorage.removeItem('google_signup_role')
+            }
+            
+            // Enviar al backend para obtener JWT
+            const response = await authAPI.post('/google', {
+              idToken,
+              email: user.email,
+              name: user.displayName,
+              photoURL: user.photoURL,
+              role: savedRole || null
+            })
+            
+            const { token, user: backendUser } = response.data
+            setToken(token)
+            const normalizedUser = {
+              ...backendUser,
+              isActive: backendUser?.isActive ?? true,
+              isVerified: backendUser?.isVerified ?? true,
+            }
+            dispatch({ type: 'SET_USER', payload: normalizedUser })
+            localStorage.setItem('user', JSON.stringify(normalizedUser))
+            toast.success(`¡Bienvenido, ${normalizedUser.name || user.displayName}!`)
+            
+            // Redirigir al dashboard según el rol
+            const userRole = normalizedUser.role || 'client'
+            const redirectPath = userRole === 'admin' 
+              ? '/admin/dashboard' 
+              : userRole === 'driver' 
+              ? '/driver/dashboard' 
+              : '/client/dashboard'
+            
+            // Usar window.location para asegurar redirección completa después del redirect
+            window.location.href = redirectPath
+            return
+          }
+        } catch (error) {
+          console.error('Error handling Google redirect:', error)
+          // Continuar con el flujo normal si hay error
+        }
+      }
+      
       if (useFirebaseAuth) {
         try {
           dispatch({ type: 'SET_LOADING', payload: true })
@@ -78,10 +131,23 @@ export const AuthProvider = ({ children }) => {
         return
       }
       const token = localStorage.getItem('token')
+      const savedUser = localStorage.getItem('user')
       
       if (token) {
         try {
           setToken(token)
+          // Intentar cargar usuario desde localStorage primero (más rápido)
+          if (savedUser) {
+            try {
+              const parsedUser = JSON.parse(savedUser)
+              dispatch({ type: 'SET_USER', payload: parsedUser })
+              dispatch({ type: 'SET_LOADING', payload: false })
+            } catch (e) {
+              // Si falla, continuar con la verificación del servidor
+            }
+          }
+          
+          // Verificar con el servidor para asegurar que el token es válido
           const response = await authAPI.get('/me')
           const serverUser = response.data.user || null
           const normalizedUser = serverUser
@@ -91,12 +157,28 @@ export const AuthProvider = ({ children }) => {
                 isVerified: serverUser.isVerified ?? false,
               }
             : null
-          dispatch({ type: 'SET_USER', payload: normalizedUser })
+          
+          if (normalizedUser) {
+            dispatch({ type: 'SET_USER', payload: normalizedUser })
+            localStorage.setItem('user', JSON.stringify(normalizedUser))
+          } else {
+            // Si no hay usuario en el servidor, limpiar
+            logout()
+          }
         } catch (error) {
           console.error('Auth initialization failed:', error)
-          logout()
+          // Si el token es inválido, limpiar todo
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          dispatch({ type: 'LOGOUT' })
+        } finally {
+          dispatch({ type: 'SET_LOADING', payload: false })
         }
       } else {
+        // Limpiar usuario si no hay token
+        if (savedUser) {
+          localStorage.removeItem('user')
+        }
         dispatch({ type: 'SET_LOADING', payload: false })
       }
     }
@@ -144,6 +226,10 @@ export const AuthProvider = ({ children }) => {
         isVerified: user?.isVerified ?? false,
       }
       dispatch({ type: 'SET_USER', payload: normalizedUser })
+      dispatch({ type: 'SET_LOADING', payload: false })
+      
+      // Guardar usuario en localStorage para persistencia
+      localStorage.setItem('user', JSON.stringify(normalizedUser))
       
       toast.success(`¡Bienvenido, ${user.firstName || user.name}!`)
       return { success: true, user: normalizedUser }
@@ -158,6 +244,7 @@ export const AuthProvider = ({ children }) => {
              });
          }
          
+         dispatch({ type: 'SET_LOADING', payload: false })
          // Retornar información especial para que el componente Login redirija
          return { 
              success: false, 
@@ -175,42 +262,58 @@ export const AuthProvider = ({ children }) => {
   }
 
   // Google login function
-  const loginWithGoogle = async () => {
+  const loginWithGoogle = async (options = {}) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true })
       
-      if (!useFirebaseAuth) {
-        throw new Error('Google login solo está disponible con Firebase Auth')
-      }
-
+      const { role } = options
+      
+      // Usar Firebase Auth para autenticación con Google (siempre disponible)
       const provider = new GoogleAuthProvider()
       provider.addScope('email')
       provider.addScope('profile')
       
+      // Usar popup en desarrollo, redirect en producción
+      let result
       if (import.meta.env.DEV) {
-        const result = await signInWithPopup(auth, provider)
-        const user = result.user
-        const idToken = await user.getIdToken()
-
-        setToken(idToken)
-        const normalizedUser = {
-          id: user.uid,
-          name: user.displayName || (user.email ? user.email.split('@')[0] : 'Usuario'),
-          email: user.email,
-          phone: user.phoneNumber || '',
-          role: 'client',
-          isVerified: user.emailVerified ?? true,
-          isActive: true,
-        }
-        dispatch({ type: 'SET_USER', payload: normalizedUser })
-
-        toast.success(`¡Bienvenido, ${normalizedUser.name}!`)
-        return { success: true, user: normalizedUser }
+        result = await signInWithPopup(auth, provider)
       } else {
+        // En producción, usar redirect
+        // Guardar el rol en sessionStorage para recuperarlo después del redirect
+        if (role) {
+          sessionStorage.setItem('google_signup_role', role)
+        }
         await signInWithRedirect(auth, provider)
-        // After redirect back, onAuthStateChanged will set user and token
         return { success: true, redirect: true }
       }
+      
+      const user = result.user
+      const idToken = await user.getIdToken()
+      
+      // Enviar token al backend para obtener JWT propio
+      const response = await authAPI.post('/google', {
+        idToken,
+        email: user.email,
+        name: user.displayName,
+        photoURL: user.photoURL,
+        role: role || null // Enviar rol si se especificó
+      })
+      
+      const { token, user: backendUser } = response.data
+      
+      // Guardar token y usuario
+      setToken(token)
+      const normalizedUser = {
+        ...backendUser,
+        isActive: backendUser?.isActive ?? true,
+        isVerified: backendUser?.isVerified ?? true,
+      }
+      dispatch({ type: 'SET_USER', payload: normalizedUser })
+      localStorage.setItem('user', JSON.stringify(normalizedUser))
+      
+      toast.success(`¡Bienvenido, ${normalizedUser.name || user.displayName}!`)
+      dispatch({ type: 'SET_LOADING', payload: false })
+      return { success: true, user: normalizedUser }
     } catch (error) {
       let message = 'Error al iniciar sesión con Google'
       
@@ -220,6 +323,8 @@ export const AuthProvider = ({ children }) => {
         message = 'Popup bloqueado. Por favor, permite popups para este sitio'
       } else if (error.code === 'auth/cancelled-popup-request') {
         message = 'Solicitud de popup cancelada'
+      } else if (error.response?.data?.message) {
+        message = error.response.data.message
       } else if (error.message) {
         message = error.message
       }
@@ -326,6 +431,7 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', error)
     } finally {
       setToken(null)
+      localStorage.removeItem('user')
       dispatch({ type: 'LOGOUT' })
       toast.success('Sesión cerrada')
     }
@@ -439,7 +545,7 @@ export const AuthProvider = ({ children }) => {
   }
 
   // Resend verification email
-  const resendVerificationEmail = async () => {
+  const resendVerificationEmail = async (email, role = 'client') => {
     try {
       if (useFirebaseAuth) {
         const user = auth.currentUser
@@ -452,7 +558,10 @@ export const AuthProvider = ({ children }) => {
         toast.success('Email de verificación enviado')
         return { success: true }
       }
-      await authAPI.post('/resend-verification')
+      if (!email) {
+        throw new Error('Email requerido para reenviar verificación')
+      }
+      await authAPI.post('/resend-otp', { email, role })
       toast.success('Email de verificación enviado')
       return { success: true }
     } catch (error) {

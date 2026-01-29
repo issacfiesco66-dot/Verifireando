@@ -89,10 +89,11 @@ const VerifyEmail = () => {
     setStatus('verifying')
     try {
       if (email) {
-          // Reenviar OTP
-          await authAPI.post('/resend-otp', { email, role: role })
+        // Reenviar OTP
+        await authAPI.post('/resend-otp', { email, role: role })
       } else {
-          await resendVerificationEmail()
+        const fallbackEmail = user?.email
+        await resendVerificationEmail(fallbackEmail, role)
       }
       
       setMessage('Hemos reenviado el código. Revisa tu WhatsApp o Email.')

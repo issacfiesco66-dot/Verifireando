@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { Eye, EyeOff, Mail, Lock, User, Phone, UserPlus, Car, CreditCard, Calendar } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
@@ -12,21 +12,31 @@ const Register = () => {
   const [justRegistered, setJustRegistered] = useState(false)
   const { register: registerUser, loginWithGoogle, loading, user } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting }
   } = useForm()
 
   const password = watch('password')
   const selectedRole = watch('role')
 
+  // Leer query param role y pre-seleccionar el rol
+  useEffect(() => {
+    const roleParam = searchParams.get('role')
+    if (roleParam && (roleParam === 'driver' || roleParam === 'client')) {
+      setValue('role', roleParam)
+    }
+  }, [searchParams, setValue])
+
   // Log para debug - versión simplificada de registro
   console.log('Register v2.0 - Conductor solo requiere licencia')
 
-  // Redirect if already logged in
+  // Redirect if already logged in (except right after form registration)
   useEffect(() => {
     if (user && !justRegistered) {
       const redirectPath = user.role === 'admin' 
@@ -69,14 +79,26 @@ const Register = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const result = await loginWithGoogle()
+      // Obtener el rol del query param o del formulario
+      const roleFromQuery = searchParams.get('role')
+      const roleFromForm = selectedRole
+      const targetRole = roleFromQuery || roleFromForm || 'client'
+      
+      // Pasar el rol a loginWithGoogle
+      const result = await loginWithGoogle({ role: targetRole })
+      
       // En producción, loginWithGoogle usa redirect y se completa en onAuthStateChanged
       if (result?.redirect) return
+      
       // Si vuelve inmediatamente (dev), navegar según rol
-      if (user) {
-        const redirectPath = user.role === 'admin' 
+      if (result.success && result.user) {
+        // Esperar un momento para que el estado se actualice completamente
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        const userRole = result.user?.role || targetRole
+        const redirectPath = userRole === 'admin' 
           ? '/admin/dashboard' 
-          : user.role === 'driver' 
+          : userRole === 'driver' 
           ? '/driver/dashboard' 
           : '/client/dashboard'
         navigate(redirectPath, { replace: true })
@@ -209,6 +231,7 @@ const Register = () => {
                 {...register('role', {
                   required: 'Selecciona el tipo de cuenta'
                 })}
+                defaultValue={searchParams.get('role') || ''}
               >
                 <option value="">Selecciona una opción</option>
                 <option value="client">Cliente</option>
@@ -237,12 +260,12 @@ const Register = () => {
                   {...register('password', {
                     required: 'La contraseña es requerida',
                     minLength: {
-                      value: 6,
-                      message: 'La contraseña debe tener al menos 6 caracteres'
+                      value: 8,
+                      message: 'La contraseña debe tener al menos 8 caracteres'
                     },
                     pattern: {
-                      value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/,
-                      message: 'La contraseña debe contener al menos una mayúscula, una minúscula y un número'
+                      value: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/,
+                      message: 'Debe incluir mayúscula, minúscula, número y símbolo'
                     }
                   })}
                 />

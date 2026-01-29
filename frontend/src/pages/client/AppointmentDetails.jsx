@@ -19,13 +19,17 @@ import {
   XCircle,
   Navigation,
   Edit,
-  Send
+  Send,
+  FileText,
+  Shield
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import MapComponent from '../../components/map/MapComponent'
+import LiveTrackingMap from '../../components/map/LiveTrackingMap'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import DriverIdentityVerifier from '../../components/client/DriverIdentityVerifier'
 import toast from 'react-hot-toast'
 
 const AppointmentDetails = () => {
@@ -36,15 +40,19 @@ const AppointmentDetails = () => {
   
   const [appointment, setAppointment] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [pickupCode, setPickupCode] = useState('')
+  const [verifyingCode, setVerifyingCode] = useState(false)
   const [cancelling, setCancelling] = useState(false)
-  const [showCancelModal, setShowCancelModal] = useState(false)
-  const [showMessageModal, setShowMessageModal] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const [showCodeInput, setShowCodeInput] = useState(false)
+  const [driverLocation, setDriverLocation] = useState(null)
   const [message, setMessage] = useState('')
   const [sendingMessage, setSendingMessage] = useState(false)
   const [rating, setRating] = useState(0)
   const [review, setReview] = useState('')
   const [submittingReview, setSubmittingReview] = useState(false)
-  const [cancelReason, setCancelReason] = useState('')
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showMessageModal, setShowMessageModal] = useState(false)
 
   useEffect(() => {
     fetchAppointment()
@@ -68,6 +76,10 @@ const AppointmentDetails = () => {
       setLoading(true)
       const response = await appointmentService.getAppointment(id)
       setAppointment(response.data.appointment)
+      // Si hay chofer asignado y el estado es assigned o driver_enroute, mostrar código
+      if (response.data.appointment.driver && ['assigned', 'driver_enroute'].includes(response.data.appointment.status)) {
+        setShowCodeInput(true)
+      }
     } catch (error) {
       toast.error('Error al cargar los detalles de la cita')
       navigate('/client/appointments')
@@ -105,14 +117,40 @@ const AppointmentDetails = () => {
   }
 
   const handleDriverLocationUpdate = (data) => {
-    if (appointment?.driver?._id === data.driverId) {
-      setAppointment(prev => ({
-        ...prev,
-        driver: {
-          ...prev.driver,
-          currentLocation: data.location
-        }
-      }))
+    if (data.appointmentId === id || data.appointmentId === appointment?._id) {
+      // Actualizar ubicación del chofer
+      setDriverLocation(data.location)
+      
+      // También actualizar en el objeto appointment si existe driver
+      if (appointment?.driver) {
+        setAppointment(prev => ({
+          ...prev,
+          driver: {
+            ...prev.driver,
+            currentLocation: data.location
+          }
+        }))
+      }
+    }
+  }
+
+  const handleVerifyPickupCode = async (e) => {
+    e.preventDefault()
+    if (!pickupCode || pickupCode.length !== 6) {
+      toast.error('Ingresa un código válido de 6 dígitos')
+      return
+    }
+
+    try {
+      setVerifyingCode(true)
+      await appointmentService.verifyPickupCode(id, pickupCode)
+      toast.success('Código verificado correctamente')
+      setShowCodeInput(false)
+      fetchAppointment() // Refrescar datos
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Código inválido')
+    } finally {
+      setVerifyingCode(false)
     }
   }
 
@@ -189,7 +227,7 @@ const AppointmentDetails = () => {
       const certificateData = {
         appointmentNumber: appointment.appointmentNumber,
         clientName: user.name,
-        carInfo: `${appointment.car.brand} ${appointment.car.model} - ${appointment.car.plates}`,
+        carInfo: `${appointment.car?.brand || appointment.car?.make} ${appointment.car?.model} - ${appointment.car?.plates || appointment.car?.licensePlate}`,
         verificationDate: appointment.completedAt || appointment.updatedAt,
         services: appointment.services.map(s => s.name).join(', '),
         driverName: appointment.driver?.name || 'N/A'
@@ -456,24 +494,24 @@ Mensaje: [Describe tu problema aquí]
                 <Car className="w-8 h-8 text-primary-600 mt-1" />
                 <div className="flex-1">
                   <h3 className="text-lg font-medium text-gray-900">
-                    {appointment.car?.make} {appointment.car?.model} {appointment.car?.year}
+                    {appointment.car?.brand || appointment.car?.make} {appointment.car?.model} {appointment.car?.year}
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                     <div>
                       <span className="text-sm text-gray-600">Placas: </span>
-                      <span className="font-medium">{appointment.car?.licensePlate}</span>
+                      <span className="font-medium">{appointment.car?.plates || appointment.car?.licensePlate || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-sm text-gray-600">VIN: </span>
-                      <span className="font-medium">{appointment.car?.vin}</span>
+                      <span className="font-medium">{appointment.car?.vin || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-sm text-gray-600">Color: </span>
-                      <span className="font-medium">{appointment.car?.color}</span>
+                      <span className="font-medium">{appointment.car?.color || 'N/A'}</span>
                     </div>
                     <div>
                       <span className="text-sm text-gray-600">Tipo: </span>
-                      <span className="font-medium">{appointment.car?.vehicleType}</span>
+                      <span className="font-medium">{appointment.car?.vehicleType || 'N/A'}</span>
                     </div>
                   </div>
                 </div>
@@ -641,7 +679,7 @@ Mensaje: [Describe tu problema aquí]
                       className={`w-5 h-5 ${star <= appointment.rating.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
                     />
                   ))}
-                  <span className="ml-2 text-sm text-gray-600">
+                  <span className="text-sm text-gray-600 ml-1">
                     {new Date(appointment.rating.createdAt).toLocaleDateString('es-ES')}
                   </span>
                 </div>
@@ -655,72 +693,174 @@ Mensaje: [Describe tu problema aquí]
 
           {/* Sidebar */}
           <div className="space-y-6">
+            {/* Seguimiento en Tiempo Real */}
+            {appointment?.driver && 
+             (appointment.status === 'driver_enroute' || appointment.status === 'picked_up') && (
+              <div className="bg-white rounded-xl shadow-soft p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Navigation className="w-5 h-5 mr-2 text-primary-600" />
+                  Seguimiento en Tiempo Real
+                </h3>
+                
+                <LiveTrackingMap
+                  driverLocation={driverLocation}
+                  pickupLocation={
+                    appointment.pickupAddress?.coordinates?.coordinates
+                      ? {
+                          lat: appointment.pickupAddress.coordinates.coordinates[1],
+                          lng: appointment.pickupAddress.coordinates.coordinates[0]
+                        }
+                      : appointment.location?.coordinates
+                      ? { 
+                          lat: appointment.location.latitude, 
+                          lng: appointment.location.longitude 
+                        }
+                      : null
+                  }
+                  deliveryLocation={
+                    appointment.deliveryAddress?.coordinates
+                      ? {
+                          lat: appointment.deliveryAddress.coordinates.lat,
+                          lng: appointment.deliveryAddress.coordinates.lng
+                        }
+                      : null
+                  }
+                  showRoute={true}
+                  height="400px"
+                />
+                
+                {driverLocation && (
+                  <div className="mt-4 flex items-center justify-between text-sm">
+                    <p className="text-gray-600 flex items-center">
+                      <MapPin className="w-4 h-4 mr-2" />
+                      Última actualización: {new Date().toLocaleTimeString('es-MX')}
+                    </p>
+                    {driverLocation.accuracy && (
+                      <p className="text-gray-500">
+                        Precisión: ±{driverLocation.accuracy.toFixed(0)} m
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* Driver Information */}
             {appointment.driver ? (
-              <div className="bg-white rounded-xl shadow-soft p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Tu chofer</h3>
+              <>
+                {/* Verificador de identidad del chofer */}
+                {(appointment.status === 'driver_enroute' || appointment.status === 'assigned') && (
+                  <DriverIdentityVerifier 
+                    appointment={appointment}
+                    onVerificationSuccess={() => {
+                      toast.success('Identidad del chofer verificada correctamente');
+                      // Aquí podrías actualizar el estado de la cita si es necesario
+                    }}
+                  />
+                )}
                 
-                <div className="flex items-center space-x-4 mb-4">
-                  <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
-                    <User className="w-6 h-6 text-primary-600" />
-                  </div>
-                  <div>
-                    <h4 className="font-medium text-gray-900">{appointment.driver.name}</h4>
-                    <div className="flex items-center space-x-1">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <Star
-                          key={star}
-                          className={`w-4 h-4 ${star <= (appointment.driver.rating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
-                        />
-                      ))}
-                      <span className="text-sm text-gray-600 ml-1">
-                        ({appointment.driver.totalRatings || 0})
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-3">
-                    <Phone className="w-4 h-4 text-gray-400" />
-                    <a
-                      href={`tel:${appointment.driver.phone}`}
-                      className="text-primary-600 hover:text-primary-700"
-                    >
-                      {appointment.driver.phone}
-                    </a>
+                {/* Información del chofer */}
+                <div className="bg-white rounded-xl shadow-soft p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">Tu chofer</h3>
+                    {appointment.driver.isVerified && (
+                      <div className="flex items-center space-x-1 bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs">
+                        <Shield className="w-3 h-3" />
+                        <span>Verificado</span>
+                      </div>
+                    )}
                   </div>
                   
-                  <div className="flex items-center space-x-3">
-                    <Mail className="w-4 h-4 text-gray-400" />
-                    <a
-                      href={`mailto:${appointment.driver.email}`}
-                      className="text-primary-600 hover:text-primary-700"
-                    >
-                      {appointment.driver.email}
-                    </a>
+                  <div className="flex items-center space-x-4 mb-4">
+                    <div className="w-12 h-12 bg-primary-100 rounded-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-primary-600" />
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-gray-900">{appointment.driver.name}</h4>
+                      <div className="flex items-center space-x-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Star
+                            key={star}
+                            className={`w-4 h-4 ${star <= (appointment.driver.rating || 0) ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
+                          />
+                        ))}
+                        <span className="text-sm text-gray-600 ml-1">
+                          ({appointment.driver.totalRatings || 0})
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-                
-                <div className="mt-4 pt-4 border-t border-gray-100">
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <Phone className="w-4 h-4 text-gray-400" />
+                      <a
+                        href={`tel:${appointment.driver.phone}`}
+                        className="text-primary-600 hover:text-primary-700"
+                      >
+                        {appointment.driver.phone}
+                      </a>
+                    </div>
+                    
+                    <div className="flex items-center space-x-3">
+                      <Mail className="w-4 h-4 text-gray-400" />
+                      <a
+                        href={`mailto:${appointment.driver.email}`}
+                        className="text-primary-600 hover:text-primary-700"
+                      >
+                        {appointment.driver.email}
+                      </a>
+                    </div>
+                    
+                    {appointment.driver.licenseNumber && (
+                      <div className="flex items-center space-x-3">
+                        <Car className="w-4 h-4 text-gray-400" />
+                        <span className="text-gray-700">
+                          Licencia: {appointment.driver.licenseNumber}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Código de verificación */}
+                  {appointment.pickupCode && ['assigned', 'driver_enroute'].includes(appointment.status) && (
+                    <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-medium text-blue-800">Código de verificación:</p>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(appointment.pickupCode);
+                            toast.success('Código copiado');
+                          }}
+                          className="text-blue-600 hover:text-blue-700 text-sm"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                      <div className="bg-white rounded-lg p-2 text-center border border-blue-300">
+                        <span className="text-2xl font-bold text-blue-900 font-mono tracking-wider">
+                          {appointment.pickupCode}
+                        </span>
+                      </div>
+                      <p className="text-xs text-blue-600 mt-2">
+                        Muestra este código al chofer cuando llegue para verificar su identidad
+                      </p>
+                    </div>
+                  )}
+                  
                   <button 
                     onClick={() => setShowMessageModal(true)}
-                    className="btn btn-secondary btn-sm w-full flex items-center justify-center space-x-2"
+                    className="mt-4 btn btn-secondary btn-sm w-full flex items-center justify-center space-x-2"
                   >
                     <MessageCircle className="w-4 h-4" />
                     <span>Enviar mensaje</span>
                   </button>
                 </div>
-              </div>
+              </>
             ) : (
-              <div className="bg-white rounded-xl shadow-soft p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Chofer</h3>
-                <div className="text-center py-4">
-                  <AlertCircle className="w-8 h-8 text-warning-500 mx-auto mb-2" />
-                  <p className="text-sm text-gray-600">
-                    Aún no se ha asignado un chofer a tu cita
-                  </p>
-                </div>
+              <div className="bg-gray-50 rounded-xl border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Chofer</h3>
+                <p className="text-gray-500">Aún no se ha asignado un chofer a esta cita</p>
               </div>
             )}
 

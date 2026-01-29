@@ -26,6 +26,7 @@ const server = createServer(app);
 const defaultOrigins = ["http://localhost:3000", "http://localhost:5173"];
 const envOriginsRaw = process.env.FRONTEND_URL || process.env.CORS_ORIGIN;
 const allowedOrigins = envOriginsRaw ? envOriginsRaw.split(',').map(s => s.trim()) : defaultOrigins;
+const allowNoOrigin = process.env.ALLOW_NO_ORIGIN === 'true' || process.env.NODE_ENV === 'development';
 
 const io = new Server(server, {
   cors: {
@@ -38,7 +39,9 @@ const io = new Server(server, {
 app.use(helmet());
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      return allowNoOrigin ? callback(null, true) : callback(new Error('CORS origin requerido'));
+    }
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error('CORS not allowed for origin: ' + origin));
   },
@@ -58,10 +61,16 @@ app.use(express.urlencoded({ extended: true }));
 
 // Conexión a MongoDB Atlas - SOLO ATLAS, sin fallback a localhost
 const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+const jwtSecret = process.env.JWT_SECRET;
 
 if (!mongoUri) {
   console.error('❌ ERROR: MONGODB_URI no está configurada');
   console.error('Configura la variable de entorno con tu connection string de Atlas');
+  process.exit(1);
+}
+if (!jwtSecret) {
+  console.error('❌ ERROR: JWT_SECRET no está configurada');
+  console.error('Configura JWT_SECRET en tu archivo .env');
   process.exit(1);
 }
 
@@ -101,7 +110,17 @@ io.on('connection', (socket) => {
   });
   
   socket.on('driver-location', (data) => {
+    // Emitir a la sala de la cita
     socket.to(data.appointmentId).emit('location-update', data);
+    
+    // También emitir con el evento que escucha el cliente
+    io.emit('driver-location-updated', {
+      appointmentId: data.appointmentId,
+      location: data.location,
+      timestamp: data.timestamp || new Date().toISOString()
+    });
+    
+    logger.info(`Ubicación del chofer actualizada para cita ${data.appointmentId}`);
   });
   
   socket.on('appointment-status', (data) => {

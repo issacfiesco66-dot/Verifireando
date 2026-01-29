@@ -55,7 +55,9 @@ const createAPIInstance = (baseURL = API_BASE_URL) => {
             }
             break
           case 403:
-            toast.error('No tienes permisos para realizar esta acción')
+            if (!data?.needsVerification) {
+              toast.error('No tienes permisos para realizar esta acción')
+            }
             break
           case 404:
             toast.error('Recurso no encontrado')
@@ -145,7 +147,7 @@ export const userService = {
   updateSettings: (settings) => userAPI.put('/settings', { settings }),
   updateProfile: (data) => authAPI.put('/profile', data),
   updateNotificationPreferences: (data) => authAPI.put('/profile', { preferences: data }),
-  resendVerificationEmail: () => authAPI.post('/resend-otp'),
+  resendVerificationEmail: (email, role = 'client') => authAPI.post('/resend-otp', { email, role }),
 }
 
 // Auth service
@@ -157,7 +159,7 @@ export const authService = {
   forgotPassword: (email) => authAPI.post('/forgot-password', { email }),
   resetPassword: (token, password) => authAPI.post('/reset-password', { token, password }),
   verifyEmail: (token) => authAPI.post('/verify-email', { token }),
-  resendVerification: () => authAPI.post('/resend-otp'),
+  resendVerification: (email, role = 'client') => authAPI.post('/resend-otp', { email, role }),
   getProfile: () => authAPI.get('/me'),
   updateProfile: (data) => authAPI.put('/profile', data),
   changePassword: (data) => authAPI.put('/change-password', data),
@@ -177,6 +179,8 @@ export const driverService = {
   activateDriver: (id) => driverAPI.put(`/${id}/activate`),
   deactivateDriver: (id) => driverAPI.put(`/${id}/deactivate`),
   updateLocation: (location) => driverAPI.put('/location', location),
+  updateOnlineStatus: (isOnline) => driverAPI.put('/me/online-status', { isOnline }),
+  updateAvailability: (isAvailable) => driverAPI.put('/me/availability', { isAvailable }),
   getAvailableDrivers: (params) => driverAPI.get('/available', { params }),
   getDriverStats: (id) => driverAPI.get(`/${id}/stats`),
   getStats: () => driverAPI.get('/stats'),

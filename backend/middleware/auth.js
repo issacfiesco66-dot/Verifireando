@@ -15,10 +15,11 @@ const auth = async (req, res, next) => {
 
     // Primero intentar JWT tradicional
     try {
-      const secret = process.env.JWT_SECRET || 'fallback-secret-key';
-      logger.info(`Auth: Attempting JWT verification`);
-      logger.info(`Auth: Using secret: ${secret}`);
-      logger.info(`Auth: Secret length: ${secret.length}`);
+      const secret = process.env.JWT_SECRET;
+      if (!secret) {
+        logger.error('Auth: JWT_SECRET no configurada');
+        return res.status(500).json({ message: 'Configuración inválida del servidor' });
+      }
       
       const decoded = jwt.verify(token, secret);
       logger.info(`Auth: JWT decoded successfully for user ID: ${decoded.id}`);
@@ -124,7 +125,11 @@ const optionalAuth = async (req, res, next) => {
     if (token) {
       // Intentar JWT primero
       try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret-key');
+        const secret = process.env.JWT_SECRET;
+        if (!secret) {
+          return next();
+        }
+        const decoded = jwt.verify(token, secret);
         // Todos los usuarios están en el modelo User (incluyendo drivers)
         let user = await User.findById(decoded.id).select('-password');
         
@@ -149,15 +154,15 @@ const optionalAuth = async (req, res, next) => {
         let userDoc = null;
         let role = 'client';
         if (email) {
-          const existingDriver = await Driver.findOne({ email }).select('-password');
-          if (existingDriver) {
-            userDoc = existingDriver;
-            role = 'driver';
+          const existingUser = await User.findOne({ email }).select('-password');
+          if (existingUser) {
+            userDoc = existingUser;
+            role = existingUser.role || 'client';
           } else {
-            const existingUser = await User.findOne({ email }).select('-password');
-            if (existingUser) {
-              userDoc = existingUser;
-              role = existingUser.role || 'client';
+            const existingDriver = await Driver.findOne({ email }).select('-password');
+            if (existingDriver) {
+              userDoc = existingDriver;
+              role = 'driver';
             }
           }
         }

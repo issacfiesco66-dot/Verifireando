@@ -52,7 +52,9 @@ mkdir -p logs
 
 # 7. Reiniciar aplicación con PM2
 echo -e "${YELLOW}🔄 Reiniciando aplicación con PM2...${NC}"
-pm2 restart ecosystem.config.js --update-env
+# Si la aplicación no existe, iniciarla
+pm2 describe verifireando-backend > /dev/null 2>&1 || pm2 start ecosystem.config.js
+pm2 restart verifireando-backend --update-env
 
 # 8. Guardar configuración de PM2
 pm2 save

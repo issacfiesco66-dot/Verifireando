@@ -2,9 +2,9 @@
 module.exports = {
   apps: [{
     name: 'verifireando-backend',
-    script: './backend/app.js',
-    instances: 'max',
-    exec_mode: 'cluster',
+    script: './backend/server.js',
+    instances: 1, // Cambiar de 'max' a 1 para evitar problemas con Socket.IO
+    exec_mode: 'fork', // Cambiar de 'cluster' a 'fork' para Socket.IO
     env: {
       NODE_ENV: 'production',
       PORT: 5000

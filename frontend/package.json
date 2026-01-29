@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/copy-pwa-files.js",
+    "build": "NODE_OPTIONS=--max-old-space-size=4096 vite build && node scripts/copy-pwa-files.js",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "postbuild": "node scripts/copy-pwa-files.js"

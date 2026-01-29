@@ -26,6 +26,9 @@ import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
 import MapComponent from '../../components/map/MapComponent'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import { useDriverLocation } from '../../hooks/useDriverLocation'
+import DriverVerificationCard from '../../components/driver/DriverVerificationCard'
+import TripStatusFlow from '../../components/driver/TripStatusFlow'
 import toast from 'react-hot-toast'
 
 const AppointmentDetails = () => {
@@ -40,6 +43,13 @@ const AppointmentDetails = () => {
   const [documents, setDocuments] = useState([])
   const [notes, setNotes] = useState('')
   const [activeTab, setActiveTab] = useState('details')
+  
+  // Rastrear ubicación del chofer cuando está en ruta
+  const shouldTrack = appointment?.status === 'driver_enroute' || appointment?.status === 'picked_up'
+  const { location: driverLocation, error: locationError, isWatching } = useDriverLocation(
+    appointment?._id,
+    shouldTrack
+  )
 
   useEffect(() => {
     fetchAppointmentDetails()
@@ -203,13 +213,44 @@ const AppointmentDetails = () => {
     }
   }
 
-  const openNavigation = () => {
-    if (!appointment?.location?.latitude || !appointment?.location?.longitude) {
-      toast.error('Ubicación no disponible para navegación')
-      return
+  const openNavigation = (type = 'pickup') => {
+    let lat, lng, address
+    
+    if (type === 'pickup') {
+      if (appointment.location?.latitude && appointment.location?.longitude) {
+        lat = appointment.location.latitude
+        lng = appointment.location.longitude
+        address = appointment.location.address || appointment.pickupAddress?.street
+      } else if (appointment.pickupAddress?.coordinates?.coordinates) {
+        const [lngVal, latVal] = appointment.pickupAddress.coordinates.coordinates
+        lat = latVal
+        lng = lngVal
+        address = `${appointment.pickupAddress.street}, ${appointment.pickupAddress.city}, ${appointment.pickupAddress.state}`
+      } else {
+        toast.error('Ubicación de recogida no disponible para navegación')
+        return
+      }
+    } else {
+      if (appointment.deliveryLocation?.latitude && appointment.deliveryLocation?.longitude) {
+        lat = appointment.deliveryLocation.latitude
+        lng = appointment.deliveryLocation.longitude
+        address = appointment.deliveryLocation.address
+      } else if (appointment.deliveryAddress?.coordinates?.lat && appointment.deliveryAddress?.coordinates?.lng) {
+        lat = appointment.deliveryAddress.coordinates.lat
+        lng = appointment.deliveryAddress.coordinates.lng
+        address = `${appointment.deliveryAddress.street || ''}, ${appointment.deliveryAddress.city || ''}, ${appointment.deliveryAddress.state || ''}`
+      } else if (appointment.deliveryAddress?.coordinates?.coordinates) {
+        const [lngVal, latVal] = appointment.deliveryAddress.coordinates.coordinates
+        lat = latVal
+        lng = lngVal
+        address = `${appointment.deliveryAddress.street || ''}, ${appointment.deliveryAddress.city || ''}, ${appointment.deliveryAddress.state || ''}`
+      } else {
+        toast.error('Ubicación de entrega no disponible para navegación')
+        return
+      }
     }
-    const { latitude, longitude } = appointment.location
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${latitude},${longitude}`
+    
+    const url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}${address ? `&destination_place_id=${encodeURIComponent(address)}` : ''}`
     window.open(url, '_blank')
   }
 
@@ -320,7 +361,7 @@ const AppointmentDetails = () => {
                   {getStatusIcon(appointment.status)}
                   <div>
                     <h1 className="text-2xl font-bold text-gray-900">
-                      Cita #{appointment.id}
+                      Cita #{appointment.appointmentNumber || appointment.id || appointment._id}
                     </h1>
                     <p className="text-gray-600">
                       {formatDate(appointment.scheduledDate)}
@@ -332,13 +373,28 @@ const AppointmentDetails = () => {
                 <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(appointment.status)}`}>
                   {getStatusText(appointment.status)}
                 </span>
-                <button
-                  onClick={openNavigation}
-                  className="btn btn-secondary btn-md flex items-center space-x-2"
-                >
-                  <Navigation className="w-4 h-4" />
-                  <span>Navegar</span>
-                </button>
+                {(appointment.location?.latitude && appointment.location?.longitude) || 
+                 (appointment.pickupAddress?.coordinates?.coordinates) ? (
+                  <button
+                    onClick={() => openNavigation('pickup')}
+                    className="btn btn-secondary btn-md flex items-center space-x-2"
+                  >
+                    <Navigation className="w-4 h-4" />
+                    <span>Navegar a recogida</span>
+                  </button>
+                ) : null}
+                {(appointment.deliveryLocation || appointment.deliveryAddress) && 
+                 ((appointment.deliveryLocation?.latitude && appointment.deliveryLocation?.longitude) ||
+                  (appointment.deliveryAddress?.coordinates?.lat && appointment.deliveryAddress?.coordinates?.lng) ||
+                  (appointment.deliveryAddress?.coordinates?.coordinates)) ? (
+                  <button
+                    onClick={() => openNavigation('delivery')}
+                    className="btn btn-success btn-md flex items-center space-x-2"
+                  >
+                    <Navigation className="w-4 h-4" />
+                    <span>Navegar a entrega</span>
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>
@@ -346,45 +402,84 @@ const AppointmentDetails = () => {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Status Actions */}
-        {appointment.status !== 'completed' && appointment.status !== 'cancelled' && (
-          <div className="bg-white rounded-xl shadow-soft p-6 mb-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
-              Acciones de estado
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              {appointment.status === 'confirmed' && (
-                <button
-                  onClick={() => updateAppointmentStatus('in_progress')}
-                  disabled={updating}
-                  className="btn btn-primary btn-md flex items-center space-x-2"
-                >
-                  <Play className="w-4 h-4" />
-                  <span>Iniciar verificación</span>
-                </button>
-              )}
-              {appointment.status === 'in_progress' && (
-                <>
-                  <button
-                    onClick={() => updateAppointmentStatus('completed')}
-                    disabled={updating}
-                    className="btn btn-success btn-md flex items-center space-x-2"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Completar verificación</span>
-                  </button>
-                  <button
-                    onClick={() => updateAppointmentStatus('confirmed')}
-                    disabled={updating}
-                    className="btn btn-secondary btn-md flex items-center space-x-2"
-                  >
-                    <Pause className="w-4 h-4" />
-                    <span>Pausar</span>
-                  </button>
-                </>
-              )}
+        {/* Accept Button for Pending Appointments */}
+        {appointment.status === 'pending' && !appointment.driver && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-blue-900 mb-2">
+                  Cita disponible para aceptar
+                </h2>
+                <p className="text-blue-700">
+                  Esta cita está disponible. Si quieres aceptarla, haz clic en el botón de abajo.
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    setUpdating(true)
+                    await appointmentService.acceptAppointment(id)
+                    toast.success('¡Cita aceptada exitosamente!')
+                    await fetchAppointmentDetails() // Refrescar detalles
+                  } catch (error) {
+                    toast.error(error.response?.data?.message || 'Error al aceptar la cita')
+                  } finally {
+                    setUpdating(false)
+                  }
+                }}
+                disabled={updating}
+                className="btn btn-success btn-lg flex items-center space-x-2 px-6"
+              >
+                <CheckCircle className="w-5 h-5" />
+                <span>{updating ? 'Aceptando...' : 'Aceptar esta cita'}</span>
+              </button>
             </div>
           </div>
+        )}
+
+        {/* Código de verificación - MOSTRAR PRIMERO SI ESTÁ DISPONIBLE */}
+        {appointment.pickupCode && ['assigned', 'driver_enroute'].includes(appointment.status) && (
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 rounded-xl p-6 mb-8 shadow-lg">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center space-x-3 mb-2">
+                  <CheckCircle className="w-6 h-6 text-blue-600" />
+                  <h2 className="text-xl font-bold text-blue-900">
+                    Tu código de verificación
+                  </h2>
+                </div>
+                <p className="text-blue-700 mb-4">
+                  Muestra este código al cliente cuando llegues para que pueda verificar tu identidad
+                </p>
+                <div className="bg-white rounded-lg p-6 border-2 border-blue-400 shadow-inner">
+                  <div className="flex items-center justify-between">
+                    <span className="text-5xl font-bold text-blue-900 font-mono tracking-wider">
+                      {appointment.pickupCode}
+                    </span>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(appointment.pickupCode)
+                        toast.success('Código copiado al portapapeles')
+                      }}
+                      className="btn btn-secondary btn-md flex items-center space-x-2"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Copiar</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Nuevo flujo de estado del viaje */}
+        {appointment.status !== 'cancelled' && appointment.status !== 'pending' && (
+          <TripStatusFlow 
+            appointment={appointment}
+            onUpdateStatus={updateAppointmentStatus}
+            isUpdating={updating}
+          />
         )}
 
         {/* Tabs */}
@@ -458,41 +553,68 @@ const AppointmentDetails = () => {
                     <div>
                       <p className="text-sm text-gray-500">Marca y modelo</p>
                       <p className="font-medium text-gray-900">
-                        {appointment.vehicle?.make} {appointment.vehicle?.model}
+                        {appointment.car?.brand || appointment.car?.make} {appointment.car?.model}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Año</p>
                       <p className="font-medium text-gray-900">
-                        {appointment.vehicle?.year}
+                        {appointment.car?.year}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Placa</p>
                       <p className="font-medium text-gray-900">
-                        {appointment.vehicle?.licensePlate}
+                        {appointment.car?.plates || appointment.car?.licensePlate}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Color</p>
                       <p className="font-medium text-gray-900">
-                        {appointment.vehicle?.color}
+                        {appointment.car?.color}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Tipo</p>
                       <p className="font-medium text-gray-900">
-                        {appointment.vehicle?.type}
+                        {appointment.car?.vehicleType || appointment.car?.type || 'N/A'}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">VIN</p>
                       <p className="font-medium text-gray-900 font-mono text-sm">
-                        {appointment.vehicle?.vin}
+                        {appointment.car?.vin || 'N/A'}
                       </p>
                     </div>
                   </div>
                 </div>
+
+                {/* Código de verificación */}
+                {appointment.pickupCode && ['assigned', 'driver_enroute'].includes(appointment.status) && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+                    <h3 className="text-lg font-semibold text-blue-900 mb-3 flex items-center space-x-2">
+                      <CheckCircle className="w-5 h-5" />
+                      <span>Código de verificación</span>
+                    </h3>
+                    <p className="text-sm text-blue-700 mb-4">
+                      Muestra este código al cliente cuando llegues para que pueda verificar tu identidad:
+                    </p>
+                    <div className="bg-white rounded-lg p-4 border-2 border-blue-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-4xl font-bold text-blue-900 font-mono">{appointment.pickupCode}</span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(appointment.pickupCode)
+                            toast.success('Código copiado')
+                          }}
+                          className="text-blue-600 hover:text-blue-700 text-sm px-3 py-2 border border-blue-300 rounded-lg hover:bg-blue-50"
+                        >
+                          Copiar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Service Information */}
                 <div>
@@ -503,13 +625,14 @@ const AppointmentDetails = () => {
                     <div>
                       <p className="text-sm text-gray-500">Tipo de servicio</p>
                       <p className="font-medium text-gray-900">
-                        {appointment.serviceType || 'Verificación vehicular'}
+                        {appointment.services?.verification ? 'Verificación vehicular' : 'Servicios adicionales'}
+                        {appointment.services?.additionalServices?.length > 0 && ` + ${appointment.services.additionalServices.length} servicio(s) adicional(es)`}
                       </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Monto</p>
                       <p className="font-medium text-gray-900">
-                        ${appointment.amount?.toLocaleString('es-MX')} MXN
+                        ${(appointment.pricing?.total || appointment.amount || 0).toLocaleString('es-MX')} MXN
                       </p>
                     </div>
                   </div>
@@ -525,42 +648,135 @@ const AppointmentDetails = () => {
 
             {/* Location Tab */}
             {activeTab === 'location' && (
-              <div className="space-y-6">
+              <div className="space-y-8">
+                {/* Ubicación de Recogida */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
-                    <MapPin className="w-5 h-5" />
-                    <span>Ubicación de la cita</span>
+                    <MapPin className="w-5 h-5 text-blue-600" />
+                    <span>Ubicación de recogida</span>
                   </h3>
                   <div className="mb-4">
-                    <p className="text-gray-900">{appointment.location?.address}</p>
-                    {appointment.location?.notes && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        Notas: {appointment.location.notes}
+                    <p className="text-gray-900 font-medium">
+                      {appointment.location?.address || 
+                       (appointment.pickupAddress?.street 
+                        ? `${appointment.pickupAddress.street}, ${appointment.pickupAddress.city || ''}, ${appointment.pickupAddress.state || ''}`
+                        : 'Dirección no disponible')}
+                    </p>
+                    {(appointment.location?.instructions || appointment.pickupAddress?.instructions) && (
+                      <p className="text-sm text-gray-500 mt-2">
+                        <span className="font-medium">Instrucciones:</span> {appointment.location?.instructions || appointment.pickupAddress?.instructions}
                       </p>
                     )}
+                    <button
+                      onClick={() => openNavigation('pickup')}
+                      className="mt-3 btn btn-primary btn-sm flex items-center space-x-2"
+                    >
+                      <Navigation className="w-4 h-4" />
+                      <span>Abrir en Google Maps</span>
+                    </button>
                   </div>
-                </div>
-                
-                {appointment.location?.latitude && appointment.location?.longitude ? (
-                  <div className="h-96 rounded-lg overflow-hidden">
-                    <MapComponent
-                      center={[appointment.location.longitude, appointment.location.latitude]}
-                      markers={[{
-                        id: 'appointment',
-                        longitude: appointment.location.longitude,
-                        latitude: appointment.location.latitude,
-                        type: 'appointment',
-                        popup: {
-                          title: 'Ubicación de la cita',
-                          content: appointment.location?.address || 'Ubicación de la cita'
+                  
+                  {(appointment.location?.latitude && appointment.location?.longitude) || 
+                   (appointment.pickupAddress?.coordinates?.coordinates) ? (
+                    <div className="h-96 rounded-lg overflow-hidden border border-gray-200">
+                      <MapComponent
+                        center={
+                          appointment.location?.longitude && appointment.location?.latitude
+                            ? [appointment.location.longitude, appointment.location.latitude]
+                            : appointment.pickupAddress?.coordinates?.coordinates
+                              ? [appointment.pickupAddress.coordinates.coordinates[0], appointment.pickupAddress.coordinates.coordinates[1]]
+                              : [0, 0]
                         }
-                      }]}
-                      zoom={15}
-                    />
-                  </div>
-                ) : (
-                  <div className="h-96 rounded-lg bg-gray-100 flex items-center justify-center">
-                    <p className="text-gray-500">Ubicación no disponible</p>
+                        markers={[{
+                          id: 'pickup',
+                          longitude: appointment.location?.longitude || appointment.pickupAddress?.coordinates?.coordinates?.[0] || 0,
+                          latitude: appointment.location?.latitude || appointment.pickupAddress?.coordinates?.coordinates?.[1] || 0,
+                          type: 'appointment',
+                          popup: {
+                            title: 'Ubicación de recogida',
+                            content: appointment.location?.address || 
+                                     (appointment.pickupAddress?.street 
+                                      ? `${appointment.pickupAddress.street}, ${appointment.pickupAddress.city || ''}, ${appointment.pickupAddress.state || ''}`
+                                      : 'Ubicación de recogida')
+                          }
+                        }]}
+                        zoom={15}
+                      />
+                    </div>
+                  ) : (
+                    <div className="h-96 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
+                      <p className="text-gray-500">Ubicación de recogida no disponible</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Ubicación de Entrega */}
+                {(appointment.deliveryLocation || appointment.deliveryAddress) && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+                      <Navigation className="w-5 h-5 text-green-600" />
+                      <span>Ubicación de entrega</span>
+                    </h3>
+                    <div className="mb-4">
+                      <p className="text-gray-900 font-medium">
+                        {appointment.deliveryLocation?.address || 
+                         (appointment.deliveryAddress?.street 
+                          ? `${appointment.deliveryAddress.street}, ${appointment.deliveryAddress.city || ''}, ${appointment.deliveryAddress.state || ''}`
+                          : 'Dirección no disponible')}
+                      </p>
+                      {(appointment.deliveryLocation?.instructions || appointment.deliveryAddress?.instructions) && (
+                        <p className="text-sm text-gray-500 mt-2">
+                          <span className="font-medium">Instrucciones:</span> {appointment.deliveryLocation?.instructions || appointment.deliveryAddress?.instructions}
+                        </p>
+                      )}
+                      <button
+                        onClick={() => openNavigation('delivery')}
+                        className="mt-3 btn btn-success btn-sm flex items-center space-x-2"
+                      >
+                        <Navigation className="w-4 h-4" />
+                        <span>Abrir en Google Maps</span>
+                      </button>
+                    </div>
+                    
+                    {(appointment.deliveryLocation?.latitude && appointment.deliveryLocation?.longitude) || 
+                     (appointment.deliveryAddress?.coordinates?.lat && appointment.deliveryAddress?.coordinates?.lng) ||
+                     (appointment.deliveryAddress?.coordinates?.coordinates) ? (
+                      <div className="h-96 rounded-lg overflow-hidden border border-gray-200">
+                        <MapComponent
+                          center={
+                            appointment.deliveryLocation?.longitude && appointment.deliveryLocation?.latitude
+                              ? [appointment.deliveryLocation.longitude, appointment.deliveryLocation.latitude]
+                              : appointment.deliveryAddress?.coordinates?.lng && appointment.deliveryAddress?.coordinates?.lat
+                                ? [appointment.deliveryAddress.coordinates.lng, appointment.deliveryAddress.coordinates.lat]
+                                : appointment.deliveryAddress?.coordinates?.coordinates
+                                  ? [appointment.deliveryAddress.coordinates.coordinates[0], appointment.deliveryAddress.coordinates.coordinates[1]]
+                                  : [0, 0]
+                          }
+                          markers={[{
+                            id: 'delivery',
+                            longitude: appointment.deliveryLocation?.longitude || 
+                                      appointment.deliveryAddress?.coordinates?.lng || 
+                                      appointment.deliveryAddress?.coordinates?.coordinates?.[0] || 0,
+                            latitude: appointment.deliveryLocation?.latitude || 
+                                     appointment.deliveryAddress?.coordinates?.lat || 
+                                     appointment.deliveryAddress?.coordinates?.coordinates?.[1] || 0,
+                            type: 'delivery',
+                            popup: {
+                              title: 'Ubicación de entrega',
+                              content: appointment.deliveryLocation?.address || 
+                                       (appointment.deliveryAddress?.street 
+                                        ? `${appointment.deliveryAddress.street}, ${appointment.deliveryAddress.city || ''}, ${appointment.deliveryAddress.state || ''}`
+                                        : 'Ubicación de entrega')
+                            }
+                          }]}
+                          zoom={15}
+                        />
+                      </div>
+                    ) : (
+                      <div className="h-96 rounded-lg bg-gray-100 flex items-center justify-center border border-gray-200">
+                        <p className="text-gray-500">Ubicación de entrega no disponible</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
