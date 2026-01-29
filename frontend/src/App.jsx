@@ -12,7 +12,8 @@ import AdminLayout from './layouts/AdminLayout'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/Login'
 import DriverLoginPage from './pages/auth/DriverLogin'
-import RegisterPage from './pages/auth/Register'
+import RegisterClientPage from './pages/auth/RegisterClient'
+import RegisterDriverPage from './pages/auth/RegisterDriver'
 import ForgotPasswordPage from './pages/auth/ForgotPassword'
 import ResetPasswordPage from './pages/auth/ResetPassword'
 import VerifyEmailPage from './pages/auth/VerifyEmail'
@@ -113,16 +114,21 @@ function App() {
         <Route path="/auth" element={<PublicLayout />}>
           <Route path="login" element={<LoginPage />} />
           <Route path="login/driver" element={<DriverLoginPage />} />
-          <Route path="register" element={<RegisterPage />} />
+          <Route path="register" element={<RegisterClientPage />} />
+          <Route path="register/driver" element={<RegisterDriverPage />} />
           <Route path="forgot-password" element={<ForgotPasswordPage />} />
           <Route path="reset-password" element={<ResetPasswordPage />} />
           <Route path="verify-email" element={<VerifyEmailPage />} />
         </Route>
 
-        {/* Redirects para compatibilidad con URLs sin /auth - preservar query params */}
+        {/* Redirects para compatibilidad con URLs sin /auth */}
         <Route 
           path="/register" 
           element={<RedirectWithQuery to="/auth/register" />} 
+        />
+        <Route 
+          path="/register/driver" 
+          element={<RedirectWithQuery to="/auth/register/driver" />} 
         />
         <Route 
           path="/login" 

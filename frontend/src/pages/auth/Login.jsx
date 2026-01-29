@@ -79,7 +79,8 @@ function Login() {
     setError('')
 
     try {
-      const result = await loginWithGoogle()
+      // Pasar rol 'client' para que el backend cree/identifique el usuario como cliente
+      const result = await loginWithGoogle({ role: 'client' })
       
       if (result?.redirect) {
         // En producción, redirect ya está manejado por Firebase
@@ -120,13 +121,7 @@ function Login() {
           <p className="mt-2 text-center text-sm text-gray-600">
             ¿No tienes cuenta?{' '}
             <Link to="/auth/register" className="font-medium text-blue-600 hover:text-blue-500">
-              Regístrate
-            </Link>
-          </p>
-          <p className="mt-2 text-center text-sm text-gray-500">
-            ¿Eres chofer?{' '}
-            <Link to="/auth/login/driver" className="font-medium text-blue-600 hover:text-blue-500">
-              Inicia sesión como chofer
+              Regístrate como cliente
             </Link>
           </p>
         </div>

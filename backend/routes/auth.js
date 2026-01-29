@@ -728,15 +728,16 @@ router.post('/google', authLimiter, async (req, res) => {
       }
       
       await user.save();
-      logger.info(`New Google user created: ${email}`);
+      logger.info(`New Google user created: ${email} with role: ${userRole}`);
     } else {
-      // Actualizar usuario existente
+      // Usuario existente: mantener su rol actual (no cambiar el rol de un usuario existente)
+      // Solo actualizar información de sesión
       user.lastLogin = new Date();
       if (photoURL && !user.photoURL) {
         user.photoURL = photoURL;
       }
       await user.save();
-      logger.info(`Existing Google user logged in: ${email}`);
+      logger.info(`Existing Google user logged in: ${email} with existing role: ${user.role}`);
     }
 
     // Generar JWT
