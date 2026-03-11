@@ -21,8 +21,8 @@ const PricingPage = () => {
     {
       name: 'Verificación Básica',
       icon: Shield,
-      price: 500,
-      packagePrice: 450,
+      price: 1400,
+      packagePrice: 1260,
       description: 'Verificación estándar para cumplir con los requisitos legales',
       features: [
         'Inspección visual completa',
@@ -43,8 +43,8 @@ const PricingPage = () => {
     {
       name: 'Inspección Completa',
       icon: Car,
-      price: 800,
-      packagePrice: 720,
+      price: 2700,
+      packagePrice: 2430,
       description: 'Inspección integral del vehículo con reporte detallado',
       features: [
         'Todo lo de Verificación Básica',
@@ -66,8 +66,8 @@ const PricingPage = () => {
     {
       name: 'Mantenimiento Premium',
       icon: Wrench,
-      price: 1200,
-      packagePrice: 1080,
+      price: 4500,
+      packagePrice: 4050,
       description: 'Servicio completo con mantenimiento básico incluido',
       features: [
         'Todo lo de Inspección Completa',

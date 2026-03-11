@@ -25,22 +25,25 @@ const TripStatusFlow = ({
   const [showVerification, setShowVerification] = useState(false);
   const [verificationSuccess, setVerificationSuccess] = useState(false);
   
-  // Verificar el código proporcionado por el cliente
+  // Verificar el código proporcionado por el cliente contra el código real de la cita
   const verifyClientCode = () => {
     if (!clientCode || clientCode.length !== 6) {
       toast.error('Ingresa un código válido de 6 dígitos');
       return;
     }
     
-    // En un sistema real, esto verificaría el código contra el backend
-    // Simulamos una verificación exitosa con cualquier código de 6 dígitos
-    setVerificationSuccess(true);
-    toast.success('¡Identidad del cliente verificada!');
-    
-    // Después de verificar, permitir continuar con el servicio
-    setTimeout(() => {
-      setShowVerification(false);
-    }, 2000);
+    // Verificar contra el código real de la cita
+    if (appointment.pickupCode && clientCode === appointment.pickupCode) {
+      setVerificationSuccess(true);
+      toast.success('¡Identidad del cliente verificada!');
+      
+      setTimeout(() => {
+        setShowVerification(false);
+      }, 2000);
+    } else {
+      toast.error('Código incorrecto. Pide al cliente que verifique su código.');
+      setClientCode('');
+    }
   };
   
   // Obtener el siguiente estado basado en el estado actual

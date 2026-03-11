@@ -522,8 +522,8 @@ router.post('/', auth, async (req, res) => {
       });
     }
     
-    // Calcular precio base
-    let basePrice = 500;
+    // Calcular precio base según si incluye verificación
+    let basePrice = value.services?.verification ? 1400 : 0;
     let additionalServicesPrice = 0;
     if (value.services?.additionalServices?.length > 0) {
       additionalServicesPrice = value.services.additionalServices.reduce(
@@ -1411,6 +1411,47 @@ router.put('/:id/accept', auth, async (req, res) => {
         stack: error.stack
       })
     });
+  }
+});
+
+// Verificar código de recogida (cliente verifica identidad del chofer)
+router.post('/:id/verify-pickup-code', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { code } = req.body;
+
+    if (!code || code.length !== 6) {
+      return res.status(400).json({ message: 'Código inválido. Debe ser de 6 dígitos.' });
+    }
+
+    const appointment = await Appointment.findById(id);
+    if (!appointment) {
+      return res.status(404).json({ message: 'Cita no encontrada' });
+    }
+
+    // Solo el cliente puede verificar el código
+    if (appointment.client.toString() !== req.userId) {
+      return res.status(403).json({ message: 'No tienes permisos para verificar esta cita' });
+    }
+
+    // Solo verificar en estados donde el chofer está presente
+    if (!['assigned', 'driver_enroute'].includes(appointment.status)) {
+      return res.status(400).json({ message: 'El código solo se puede verificar cuando el chofer está asignado o en camino' });
+    }
+
+    // Verificar el código
+    if (appointment.pickupCode !== code) {
+      return res.status(400).json({ message: 'Código incorrecto. Verifica con tu chofer.' });
+    }
+
+    res.json({ 
+      message: 'Código verificado correctamente. Identidad del chofer confirmada.',
+      verified: true
+    });
+
+  } catch (error) {
+    logger.error('Error verificando código de recogida:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
 

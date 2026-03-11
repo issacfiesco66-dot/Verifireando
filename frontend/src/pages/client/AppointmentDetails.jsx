@@ -229,7 +229,10 @@ const AppointmentDetails = () => {
         clientName: user.name,
         carInfo: `${appointment.car?.brand || appointment.car?.make} ${appointment.car?.model} - ${appointment.car?.plates || appointment.car?.licensePlate}`,
         verificationDate: appointment.completedAt || appointment.updatedAt,
-        services: appointment.services.map(s => s.name).join(', '),
+        services: [
+          appointment.services?.verification ? 'Verificación vehicular' : '',
+          ...(appointment.services?.additionalServices?.map(s => s.name) || [])
+        ].filter(Boolean).join(', ') || 'Verificación vehicular',
         driverName: appointment.driver?.name || 'N/A'
       }
       
@@ -294,12 +297,18 @@ Mensaje: [Describe tu problema aquí]
     switch (status) {
       case 'pending':
         return <Clock className="w-6 h-6 text-warning-500" />
-      case 'confirmed':
+      case 'assigned':
         return <CheckCircle className="w-6 h-6 text-info-500" />
-      case 'in_progress':
+      case 'driver_enroute':
+        return <Navigation className="w-6 h-6 text-blue-500" />
+      case 'picked_up':
+        return <Car className="w-6 h-6 text-purple-500" />
+      case 'in_verification':
         return <AlertCircle className="w-6 h-6 text-primary-500" />
       case 'completed':
         return <CheckCircle className="w-6 h-6 text-success-500" />
+      case 'delivered':
+        return <CheckCircle className="w-6 h-6 text-green-600" />
       case 'cancelled':
         return <XCircle className="w-6 h-6 text-error-500" />
       default:
@@ -311,12 +320,18 @@ Mensaje: [Describe tu problema aquí]
     switch (status) {
       case 'pending':
         return 'Pendiente'
-      case 'confirmed':
-        return 'Confirmada'
-      case 'in_progress':
-        return 'En progreso'
+      case 'assigned':
+        return 'Chofer asignado'
+      case 'driver_enroute':
+        return 'Chofer en camino'
+      case 'picked_up':
+        return 'Vehículo recogido'
+      case 'in_verification':
+        return 'En verificación'
       case 'completed':
-        return 'Completada'
+        return 'Verificación completada'
+      case 'delivered':
+        return 'Entregado'
       case 'cancelled':
         return 'Cancelada'
       default:
@@ -328,12 +343,18 @@ Mensaje: [Describe tu problema aquí]
     switch (status) {
       case 'pending':
         return 'bg-warning-100 text-warning-800 border-warning-200'
-      case 'confirmed':
+      case 'assigned':
         return 'bg-info-100 text-info-800 border-info-200'
-      case 'in_progress':
+      case 'driver_enroute':
+        return 'bg-blue-100 text-blue-800 border-blue-200'
+      case 'picked_up':
+        return 'bg-purple-100 text-purple-800 border-purple-200'
+      case 'in_verification':
         return 'bg-primary-100 text-primary-800 border-primary-200'
       case 'completed':
         return 'bg-success-100 text-success-800 border-success-200'
+      case 'delivered':
+        return 'bg-green-100 text-green-800 border-green-200'
       case 'cancelled':
         return 'bg-error-100 text-error-800 border-error-200'
       default:
@@ -343,14 +364,14 @@ Mensaje: [Describe tu problema aquí]
 
   const canCancelAppointment = () => {
     return appointment && 
-           ['pending', 'confirmed'].includes(appointment.status) &&
+           ['pending', 'assigned', 'driver_enroute'].includes(appointment.status) &&
            new Date(appointment.scheduledDate) > new Date()
   }
 
   const canRateAppointment = () => {
     return appointment && 
-           appointment.status === 'completed' && 
-           !appointment.rating
+           appointment.status === 'delivered' && 
+           !appointment.rating?.clientRating && !appointment.clientRating
   }
 
   const openInMaps = () => {

@@ -256,12 +256,20 @@ const AppointmentDetails = () => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'confirmed':
-        return <CheckCircle className="w-6 h-6 text-success-600" />
-      case 'in_progress':
+      case 'pending':
         return <Clock className="w-6 h-6 text-warning-600" />
+      case 'assigned':
+        return <CheckCircle className="w-6 h-6 text-info-600" />
+      case 'driver_enroute':
+        return <Navigation className="w-6 h-6 text-blue-600" />
+      case 'picked_up':
+        return <Car className="w-6 h-6 text-purple-600" />
+      case 'in_verification':
+        return <AlertCircle className="w-6 h-6 text-primary-600" />
       case 'completed':
         return <CheckCircle className="w-6 h-6 text-success-600" />
+      case 'delivered':
+        return <CheckCircle className="w-6 h-6 text-green-600" />
       case 'cancelled':
         return <XCircle className="w-6 h-6 text-error-600" />
       default:
@@ -271,27 +279,43 @@ const AppointmentDetails = () => {
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'confirmed':
-        return 'Confirmada'
-      case 'in_progress':
-        return 'En progreso'
+      case 'pending':
+        return 'Pendiente'
+      case 'assigned':
+        return 'Asignada'
+      case 'driver_enroute':
+        return 'En camino'
+      case 'picked_up':
+        return 'Vehículo recogido'
+      case 'in_verification':
+        return 'En verificación'
       case 'completed':
-        return 'Completada'
+        return 'Verificación completada'
+      case 'delivered':
+        return 'Entregado'
       case 'cancelled':
         return 'Cancelada'
       default:
-        return 'Pendiente'
+        return status
     }
   }
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'confirmed':
-        return 'bg-success-100 text-success-800'
-      case 'in_progress':
+      case 'pending':
         return 'bg-warning-100 text-warning-800'
+      case 'assigned':
+        return 'bg-info-100 text-info-800'
+      case 'driver_enroute':
+        return 'bg-blue-100 text-blue-800'
+      case 'picked_up':
+        return 'bg-purple-100 text-purple-800'
+      case 'in_verification':
+        return 'bg-primary-100 text-primary-800'
       case 'completed':
         return 'bg-success-100 text-success-800'
+      case 'delivered':
+        return 'bg-green-100 text-green-800'
       case 'cancelled':
         return 'bg-error-100 text-error-800'
       default:

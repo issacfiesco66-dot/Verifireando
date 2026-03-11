@@ -108,12 +108,18 @@ const Appointments = () => {
     switch (status) {
       case 'pending':
         return <Clock className="w-5 h-5 text-warning-500" />
-      case 'confirmed':
+      case 'assigned':
         return <CheckCircle className="w-5 h-5 text-info-500" />
-      case 'in_progress':
+      case 'driver_enroute':
+        return <Clock className="w-5 h-5 text-blue-500" />
+      case 'picked_up':
+        return <AlertCircle className="w-5 h-5 text-purple-500" />
+      case 'in_verification':
         return <AlertCircle className="w-5 h-5 text-primary-500" />
       case 'completed':
         return <CheckCircle className="w-5 h-5 text-success-500" />
+      case 'delivered':
+        return <CheckCircle className="w-5 h-5 text-green-600" />
       case 'cancelled':
         return <XCircle className="w-5 h-5 text-error-500" />
       default:
@@ -125,12 +131,18 @@ const Appointments = () => {
     switch (status) {
       case 'pending':
         return 'Pendiente'
-      case 'confirmed':
-        return 'Confirmada'
-      case 'in_progress':
-        return 'En progreso'
+      case 'assigned':
+        return 'Chofer asignado'
+      case 'driver_enroute':
+        return 'Chofer en camino'
+      case 'picked_up':
+        return 'Vehículo recogido'
+      case 'in_verification':
+        return 'En verificación'
       case 'completed':
-        return 'Completada'
+        return 'Verificación completada'
+      case 'delivered':
+        return 'Entregado'
       case 'cancelled':
         return 'Cancelada'
       default:
@@ -142,12 +154,18 @@ const Appointments = () => {
     switch (status) {
       case 'pending':
         return 'bg-warning-100 text-warning-800'
-      case 'confirmed':
+      case 'assigned':
         return 'bg-info-100 text-info-800'
-      case 'in_progress':
+      case 'driver_enroute':
+        return 'bg-blue-100 text-blue-800'
+      case 'picked_up':
+        return 'bg-purple-100 text-purple-800'
+      case 'in_verification':
         return 'bg-primary-100 text-primary-800'
       case 'completed':
         return 'bg-success-100 text-success-800'
+      case 'delivered':
+        return 'bg-green-100 text-green-800'
       case 'cancelled':
         return 'bg-error-100 text-error-800'
       default:
@@ -228,9 +246,12 @@ const Appointments = () => {
             >
               <option value="all">Todos los estados</option>
               <option value="pending">Pendiente</option>
-              <option value="confirmed">Confirmada</option>
-              <option value="in_progress">En progreso</option>
+              <option value="assigned">Chofer asignado</option>
+              <option value="driver_enroute">Chofer en camino</option>
+              <option value="picked_up">Vehículo recogido</option>
+              <option value="in_verification">En verificación</option>
               <option value="completed">Completada</option>
+              <option value="delivered">Entregado</option>
               <option value="cancelled">Cancelada</option>
             </select>
 

@@ -129,9 +129,12 @@ const AppointmentManagement = () => {
   const getStatusText = (status) => {
     const statusMap = {
       'pending': 'pendiente',
-      'confirmed': 'confirmada',
-      'in-progress': 'en progreso',
+      'assigned': 'asignada',
+      'driver_enroute': 'en camino',
+      'picked_up': 'vehículo recogido',
+      'in_verification': 'en verificación',
       'completed': 'completada',
+      'delivered': 'entregado',
       'cancelled': 'cancelada'
     }
     return statusMap[status] || status
@@ -140,9 +143,12 @@ const AppointmentManagement = () => {
   const getStatusColor = (status) => {
     const colorMap = {
       'pending': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'confirmed': 'bg-blue-100 text-blue-800 border-blue-200',
-      'in-progress': 'bg-purple-100 text-purple-800 border-purple-200',
+      'assigned': 'bg-blue-100 text-blue-800 border-blue-200',
+      'driver_enroute': 'bg-indigo-100 text-indigo-800 border-indigo-200',
+      'picked_up': 'bg-purple-100 text-purple-800 border-purple-200',
+      'in_verification': 'bg-orange-100 text-orange-800 border-orange-200',
       'completed': 'bg-green-100 text-green-800 border-green-200',
+      'delivered': 'bg-emerald-100 text-emerald-800 border-emerald-200',
       'cancelled': 'bg-red-100 text-red-800 border-red-200'
     }
     return colorMap[status] || 'bg-gray-100 text-gray-800 border-gray-200'
@@ -244,9 +250,12 @@ const AppointmentManagement = () => {
                 >
                   <option value="all">Todos los estados</option>
                   <option value="pending">Pendientes</option>
-                  <option value="confirmed">Confirmadas</option>
-                  <option value="in-progress">En progreso</option>
+                  <option value="assigned">Asignadas</option>
+                  <option value="driver_enroute">En camino</option>
+                  <option value="picked_up">Vehículo recogido</option>
+                  <option value="in_verification">En verificación</option>
                   <option value="completed">Completadas</option>
+                  <option value="delivered">Entregadas</option>
                   <option value="cancelled">Canceladas</option>
                 </select>
               </div>
@@ -392,27 +401,17 @@ const AppointmentManagement = () => {
 
                     {/* Status Actions */}
                     <div className="flex items-center space-x-2">
-                      {appointment.status === 'confirmed' && (
+                      {appointment.status === 'assigned' && (
                         <button
-                          onClick={() => updateAppointmentStatus(appointment._id, 'in-progress')}
+                          onClick={() => updateAppointmentStatus(appointment._id, 'driver_enroute')}
                           disabled={processingAction === appointment._id}
-                          className="px-3 py-1 bg-purple-600 text-white text-xs rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                          className="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                         >
-                          Iniciar
-                        </button>
-                      )}
-                      
-                      {appointment.status === 'in-progress' && (
-                        <button
-                          onClick={() => updateAppointmentStatus(appointment._id, 'completed')}
-                          disabled={processingAction === appointment._id}
-                          className="px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                        >
-                          Completar
+                          Iniciar viaje
                         </button>
                       )}
 
-                      {['pending', 'confirmed'].includes(appointment.status) && (
+                      {['pending', 'assigned', 'driver_enroute'].includes(appointment.status) && (
                         <button
                           onClick={() => updateAppointmentStatus(appointment._id, 'cancelled', { reason: 'Cancelado por el chofer' })}
                           disabled={processingAction === appointment._id}

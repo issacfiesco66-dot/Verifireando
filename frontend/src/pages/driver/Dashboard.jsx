@@ -204,14 +204,22 @@ const Dashboard = () => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'confirmed':
-        return <CheckCircle className="w-5 h-5 text-success-600" />
       case 'pending':
         return <Clock className="w-5 h-5 text-warning-600" />
-      case 'cancelled':
-        return <XCircle className="w-5 h-5 text-error-600" />
+      case 'assigned':
+        return <CheckCircle className="w-5 h-5 text-info-600" />
+      case 'driver_enroute':
+        return <Clock className="w-5 h-5 text-blue-600" />
+      case 'picked_up':
+        return <AlertCircle className="w-5 h-5 text-purple-600" />
+      case 'in_verification':
+        return <AlertCircle className="w-5 h-5 text-primary-600" />
       case 'completed':
         return <CheckCircle className="w-5 h-5 text-success-600" />
+      case 'delivered':
+        return <CheckCircle className="w-5 h-5 text-green-600" />
+      case 'cancelled':
+        return <XCircle className="w-5 h-5 text-error-600" />
       default:
         return <AlertCircle className="w-5 h-5 text-gray-600" />
     }
@@ -219,14 +227,22 @@ const Dashboard = () => {
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'confirmed':
-        return 'Confirmada'
       case 'pending':
         return 'Pendiente'
-      case 'cancelled':
-        return 'Cancelada'
+      case 'assigned':
+        return 'Asignada'
+      case 'driver_enroute':
+        return 'En camino'
+      case 'picked_up':
+        return 'Vehículo recogido'
+      case 'in_verification':
+        return 'En verificación'
       case 'completed':
         return 'Completada'
+      case 'delivered':
+        return 'Entregado'
+      case 'cancelled':
+        return 'Cancelada'
       default:
         return status
     }
@@ -502,7 +518,11 @@ const Dashboard = () => {
                             </p>
                             <div className="flex items-center space-x-2 mt-1">
                               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                appointment.status === 'confirmed' ? 'bg-success-100 text-success-800' :
+                                appointment.status === 'assigned' ? 'bg-info-100 text-info-800' :
+                                appointment.status === 'driver_enroute' ? 'bg-blue-100 text-blue-800' :
+                                appointment.status === 'picked_up' ? 'bg-purple-100 text-purple-800' :
+                                appointment.status === 'in_verification' ? 'bg-primary-100 text-primary-800' :
+                                appointment.status === 'completed' || appointment.status === 'delivered' ? 'bg-success-100 text-success-800' :
                                 appointment.status === 'pending' ? 'bg-warning-100 text-warning-800' :
                                 appointment.status === 'cancelled' ? 'bg-error-100 text-error-800' :
                                 'bg-gray-100 text-gray-800'

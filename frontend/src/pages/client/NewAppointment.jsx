@@ -208,6 +208,7 @@ const NewAppointment = () => {
         services: {
           verification: true,
           additionalServices: (selectedServices || [])
+            .filter(s => s.code !== 'verification')
             .map(s => ({
               name: s.code || 'wash',
               price: s.basePrice || 0

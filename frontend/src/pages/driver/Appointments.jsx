@@ -301,9 +301,13 @@ const Appointments = () => {
               className="input input-md w-full sm:w-auto"
             >
               <option value="all">Todos los estados</option>
-              <option value="confirmed">Confirmada</option>
-              <option value="in_progress">En progreso</option>
+              <option value="pending">Pendiente</option>
+              <option value="assigned">Asignada</option>
+              <option value="driver_enroute">En camino</option>
+              <option value="picked_up">Vehículo recogido</option>
+              <option value="in_verification">En verificación</option>
               <option value="completed">Completada</option>
+              <option value="delivered">Entregado</option>
               <option value="cancelled">Cancelada</option>
             </select>
 

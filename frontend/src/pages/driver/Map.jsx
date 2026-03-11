@@ -96,12 +96,20 @@ const Map = () => {
     switch (status) {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800'
-      case 'confirmed':
-        return 'bg-green-100 text-green-800'
-      case 'in_progress':
+      case 'assigned':
         return 'bg-blue-100 text-blue-800'
+      case 'driver_enroute':
+        return 'bg-indigo-100 text-indigo-800'
+      case 'picked_up':
+        return 'bg-purple-100 text-purple-800'
+      case 'in_verification':
+        return 'bg-orange-100 text-orange-800'
       case 'completed':
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-green-100 text-green-800'
+      case 'delivered':
+        return 'bg-emerald-100 text-emerald-800'
+      case 'cancelled':
+        return 'bg-red-100 text-red-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -111,14 +119,22 @@ const Map = () => {
     switch (status) {
       case 'pending':
         return 'Pendiente'
-      case 'confirmed':
-        return 'Confirmada'
-      case 'in_progress':
-        return 'En progreso'
+      case 'assigned':
+        return 'Asignada'
+      case 'driver_enroute':
+        return 'En camino'
+      case 'picked_up':
+        return 'Vehículo recogido'
+      case 'in_verification':
+        return 'En verificación'
       case 'completed':
         return 'Completada'
+      case 'delivered':
+        return 'Entregado'
+      case 'cancelled':
+        return 'Cancelada'
       default:
-        return 'Desconocido'
+        return status
     }
   }
 
