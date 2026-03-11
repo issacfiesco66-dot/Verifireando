@@ -62,8 +62,15 @@ const HomePage = () => {
                 to="/auth/register"
                 className="btn btn-white btn-lg px-8 py-4 text-primary-600 hover:text-primary-700"
               >
-                Comenzar Ahora
+                Soy Cliente
                 <ArrowRight className="ml-2 w-5 h-5" />
+              </Link>
+              <Link
+                to="/auth/register/driver"
+                className="btn btn-outline btn-lg px-8 py-4 border-white text-white hover:bg-white hover:text-primary-600"
+              >
+                Soy Chofer
+                <Car className="ml-2 w-5 h-5" />
               </Link>
               <Link
                 to="/how-it-works"
@@ -102,6 +109,57 @@ const HomePage = () => {
                 </p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Driver Section */}
+      <section className="py-20 bg-gray-100">
+        <div className="container mx-auto px-4">
+          <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl p-8 md:p-12">
+            <div className="text-center mb-8">
+              <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Car className="w-10 h-10 text-primary-600" />
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+                ¿Eres Chofer Verificador?
+              </h2>
+              <p className="text-xl text-gray-600 mb-8">
+                Únete a nuestra plataforma y comienza a generar ingresos verificando vehículos
+              </p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Link
+                  to="/auth/register/driver"
+                  className="btn btn-primary btn-lg px-8 py-4"
+                >
+                  Regístrate como Chofer
+                  <ArrowRight className="ml-2 w-5 h-5" />
+                </Link>
+                <Link
+                  to="/auth/login/driver"
+                  className="btn btn-outline btn-lg px-8 py-4 border-primary-600 text-primary-600 hover:bg-primary-600 hover:text-white"
+                >
+                  Iniciar Sesión
+                </Link>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-3 gap-6 mt-8">
+              <div className="text-center p-4">
+                <Award className="w-8 h-8 text-primary-600 mx-auto mb-3" />
+                <h3 className="font-semibold text-gray-900 mb-2">Gana Dinero</h3>
+                <p className="text-sm text-gray-600">Genera ingresos verificando vehículos</p>
+              </div>
+              <div className="text-center p-4">
+                <Clock className="w-8 h-8 text-primary-600 mx-auto mb-3" />
+                <h3 className="font-semibold text-gray-900 mb-2">Horarios Flexibles</h3>
+                <p className="text-sm text-gray-600">Trabaja cuando quieras</p>
+              </div>
+              <div className="text-center p-4">
+                <Users className="w-8 h-8 text-primary-600 mx-auto mb-3" />
+                <h3 className="font-semibold text-gray-900 mb-2">Clientes Garantizados</h3>
+                <p className="text-sm text-gray-600">Accede a citas programadas</p>
+              </div>
+            </div>
           </div>
         </div>
       </section>

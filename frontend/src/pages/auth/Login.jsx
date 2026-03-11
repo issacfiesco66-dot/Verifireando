@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { FcGoogle } from 'react-icons/fc'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -10,9 +10,26 @@ function Login() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [role, setRole] = useState('client') // 'client' | 'driver'
   
   const { login, loginWithGoogle, user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [searchParams] = useSearchParams()
+
+  // Determinar rol inicial según ruta o query (?role=driver)
+  useEffect(() => {
+    const roleFromQuery = searchParams.get('role')
+    const isDriverPath = location.pathname.includes('/login/driver')
+
+    if (roleFromQuery === 'driver' || isDriverPath) {
+      setRole('driver')
+    } else if (roleFromQuery === 'client') {
+      setRole('client')
+    } else {
+      setRole('client')
+    }
+  }, [location.pathname, searchParams])
 
   // Redirigir si el usuario ya está autenticado
   useEffect(() => {
@@ -43,7 +60,7 @@ function Login() {
       const result = await login({
         email: formData.email,
         password: formData.password,
-        role: 'client' // Cliente por defecto
+        role // Cliente o chofer según selección
       })
       
       if (result.success) {
@@ -63,7 +80,7 @@ function Login() {
         // Usar replace para evitar que el usuario pueda volver atrás
         navigate(redirectPath, { replace: true })
       } else if (result.needsVerification) {
-        navigate('/auth/verify-email', { state: { email: formData.email, userId: result.userId } })
+        navigate('/auth/verify-email', { state: { email: formData.email, userId: result.userId, role } })
       } else {
         setError(result.error || 'Error al iniciar sesión')
       }
@@ -79,8 +96,8 @@ function Login() {
     setError('')
 
     try {
-      // Pasar rol 'client' para que el backend cree/identifique el usuario como cliente
-      const result = await loginWithGoogle({ role: 'client' })
+      // Pasar rol seleccionado para que el backend cree/identifique correctamente
+      const result = await loginWithGoogle({ role })
       
       if (result?.redirect) {
         // En producción, redirect ya está manejado por Firebase
@@ -92,7 +109,7 @@ function Login() {
         await new Promise(resolve => setTimeout(resolve, 100))
         
         // Redirigir según el rol del usuario
-        const userRole = result.user?.role || 'client'
+        const userRole = result.user?.role || role || 'client'
         const redirectPath = userRole === 'admin' 
           ? '/admin/dashboard' 
           : userRole === 'driver' 
@@ -118,10 +135,48 @@ function Login() {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Iniciar sesión
           </h2>
+
+          {/* Selector de tipo de cuenta */}
+          <div className="mt-4 flex justify-center space-x-2" aria-label="Tipo de cuenta">
+            <button
+              type="button"
+              onClick={() => setRole('client')}
+              className={`px-4 py-1 rounded-full text-sm border ${
+                role === 'client'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-700 border-gray-300'
+              }`}
+            >
+              Cliente
+            </button>
+            <button
+              type="button"
+              onClick={() => setRole('driver')}
+              className={`px-4 py-1 rounded-full text-sm border ${
+                role === 'driver'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-700 border-gray-300'
+              }`}
+            >
+              Chofer
+            </button>
+          </div>
+
+          <p className="mt-2 text-center text-xs text-gray-500">
+            Estás iniciando sesión como{' '}
+            <span className="font-semibold">
+              {role === 'driver' ? 'chofer' : 'cliente'}
+            </span>
+            .
+          </p>
+
           <p className="mt-2 text-center text-sm text-gray-600">
             ¿No tienes cuenta?{' '}
-            <Link to="/auth/register" className="font-medium text-blue-600 hover:text-blue-500">
-              Regístrate como cliente
+            <Link
+              to={role === 'driver' ? '/auth/register?role=driver' : '/auth/register'}
+              className="font-medium text-blue-600 hover:text-blue-500"
+            >
+              Regístrate como {role === 'driver' ? 'chofer' : 'cliente'}
             </Link>
           </p>
         </div>

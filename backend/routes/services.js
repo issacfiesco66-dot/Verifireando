@@ -26,8 +26,26 @@ router.get('/', async (req, res) => {
     logger.error('Error al obtener servicios:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message
+      message: 'Error interno del servidor'
+    });
+  }
+});
+
+// GET /api/services/categories/list - Obtener categorías disponibles
+// IMPORTANTE: Esta ruta debe estar ANTES de /:id para que 'categories' no sea interpretado como un ID
+router.get('/categories/list', async (req, res) => {
+  try {
+    const categories = await Service.distinct('category', { isActive: true });
+    
+    res.json({
+      success: true,
+      data: categories
+    });
+  } catch (error) {
+    logger.error('Error al obtener categorías:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error interno del servidor'
     });
   }
 });
@@ -49,11 +67,10 @@ router.get('/:id', async (req, res) => {
       data: service
     });
   } catch (error) {
-    console.error('Error al obtener servicio:', error);
+    logger.error('Error al obtener servicio:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message
+      message: 'Error interno del servidor'
     });
   }
 });
@@ -78,7 +95,7 @@ router.post('/', auth, async (req, res) => {
       data: service
     });
   } catch (error) {
-    console.error('Error al crear servicio:', error);
+    logger.error('Error al crear servicio:', error);
     
     if (error.name === 'ValidationError') {
       return res.status(400).json({
@@ -97,8 +114,7 @@ router.post('/', auth, async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message
+      message: 'Error interno del servidor'
     });
   }
 });
@@ -133,7 +149,7 @@ router.put('/:id', auth, async (req, res) => {
       data: service
     });
   } catch (error) {
-    console.error('Error al actualizar servicio:', error);
+    logger.error('Error al actualizar servicio:', error);
     
     if (error.name === 'ValidationError') {
       return res.status(400).json({
@@ -145,8 +161,7 @@ router.put('/:id', auth, async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message
+      message: 'Error interno del servidor'
     });
   }
 });
@@ -181,30 +196,10 @@ router.delete('/:id', auth, async (req, res) => {
       data: service
     });
   } catch (error) {
-    console.error('Error al eliminar servicio:', error);
+    logger.error('Error al eliminar servicio:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message
-    });
-  }
-});
-
-// GET /api/services/categories/list - Obtener categorías disponibles
-router.get('/categories/list', async (req, res) => {
-  try {
-    const categories = await Service.distinct('category', { isActive: true });
-    
-    res.json({
-      success: true,
-      data: categories
-    });
-  } catch (error) {
-    console.error('Error al obtener categorías:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Error interno del servidor',
-      error: error.message
+      message: 'Error interno del servidor'
     });
   }
 });
@@ -236,11 +231,10 @@ router.post('/:id/book', async (req, res) => {
       data: service
     });
   } catch (error) {
-    console.error('Error al actualizar estadísticas:', error);
+    logger.error('Error al actualizar estadísticas:', error);
     res.status(500).json({
       success: false,
-      message: 'Error interno del servidor',
-      error: error.message
+      message: 'Error interno del servidor'
     });
   }
 });

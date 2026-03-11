@@ -657,7 +657,7 @@ router.put('/change-password', auth, async (req, res) => {
 // Google Sign-In
 router.post('/google', authLimiter, async (req, res) => {
   try {
-    const { idToken, email, name, photoURL } = req.body;
+    const { idToken, email, name, photoURL, role } = req.body;
 
     if (!email) {
       return res.status(400).json({ 

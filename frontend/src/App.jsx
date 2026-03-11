@@ -11,9 +11,7 @@ import AdminLayout from './layouts/AdminLayout'
 // Public Pages
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/Login'
-import DriverLoginPage from './pages/auth/DriverLogin'
-import RegisterClientPage from './pages/auth/RegisterClient'
-import RegisterDriverPage from './pages/auth/RegisterDriver'
+import RegisterPage from './pages/auth/Register'
 import ForgotPasswordPage from './pages/auth/ForgotPassword'
 import ResetPasswordPage from './pages/auth/ResetPassword'
 import VerifyEmailPage from './pages/auth/VerifyEmail'
@@ -112,10 +110,16 @@ function App() {
 
         {/* Auth Routes */}
         <Route path="/auth" element={<PublicLayout />}>
+          {/* Login único con selector de rol */}
           <Route path="login" element={<LoginPage />} />
-          <Route path="login/driver" element={<DriverLoginPage />} />
-          <Route path="register" element={<RegisterClientPage />} />
-          <Route path="register/driver" element={<RegisterDriverPage />} />
+          {/* Ruta de login de chofer reutiliza la misma página, preseleccionando el rol */}
+          <Route path="login/driver" element={<LoginPage />} />
+
+          {/* Registro único con selector de rol */}
+          <Route path="register" element={<RegisterPage />} />
+          {/* Mantener ruta /auth/register/driver para compatibilidad */}
+          <Route path="register/driver" element={<RegisterPage />} />
+
           <Route path="forgot-password" element={<ForgotPasswordPage />} />
           <Route path="reset-password" element={<ResetPasswordPage />} />
           <Route path="verify-email" element={<VerifyEmailPage />} />
@@ -128,7 +132,7 @@ function App() {
         />
         <Route 
           path="/register/driver" 
-          element={<RedirectWithQuery to="/auth/register/driver" />} 
+          element={<RedirectWithQuery to="/auth/register?role=driver" />} 
         />
         <Route 
           path="/login" 
@@ -136,7 +140,7 @@ function App() {
         />
         <Route 
           path="/login/driver" 
-          element={<RedirectWithQuery to="/auth/login/driver" />} 
+          element={<RedirectWithQuery to="/auth/login?role=driver" />} 
         />
 
         {/* Client Routes */}

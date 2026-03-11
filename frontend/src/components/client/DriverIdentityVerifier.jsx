@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, QrCode, AlertCircle, CheckCircle, Camera, X } from 'lucide-react';
-import { QrReader } from 'react-qr-reader';
+import { QrReader } from '@blackbox-vision/react-qr-reader';
 import toast from 'react-hot-toast';
 import { appointmentService } from '../../services/api';
 
@@ -204,9 +204,12 @@ const DriverIdentityVerifier = ({
                     <div className="rounded-lg overflow-hidden">
                       <QrReader
                         constraints={{ facingMode: 'environment' }}
-                        onResult={(result) => {
+                        onResult={(result, error) => {
                           if (result) {
-                            handleQrScan(result.text);
+                            handleQrScan(result?.text);
+                          }
+                          if (error) {
+                            console.info(error);
                           }
                         }}
                         style={{ width: '100%' }}

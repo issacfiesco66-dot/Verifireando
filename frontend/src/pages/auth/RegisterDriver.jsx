@@ -48,10 +48,14 @@ const RegisterDriver = () => {
         licenseExpiry: data.licenseExpiry
       }
       
-      await registerUser(registrationData)
+      const result = await registerUser(registrationData)
       
-      // Redirect to email verification
-      navigate('/auth/verify-email', { replace: true, state: { email: data.email, role: 'driver' } })
+      // Solo redirigir si el registro fue exitoso
+      if (result?.success) {
+        navigate('/auth/verify-email', { replace: true, state: { email: data.email, role: 'driver' } })
+      } else {
+        setJustRegistered(false)
+      }
     } catch (error) {
       setJustRegistered(false)
       // Error is handled by AuthContext

@@ -124,7 +124,7 @@ function DriverLogin() {
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             ¿No tienes cuenta?{' '}
-            <Link to="/auth/register?role=driver" className="font-medium text-blue-600 hover:text-blue-500">
+            <Link to="/auth/register/driver" className="font-medium text-blue-600 hover:text-blue-500">
               Regístrate como chofer
             </Link>
           </p>

@@ -32,6 +32,12 @@ const PublicLayout = () => {
             </nav>
             <div className="flex items-center space-x-4">
               <a
+                href="/auth/login/driver"
+                className="text-gray-700 hover:text-blue-600 text-sm"
+              >
+                Soy Chofer
+              </a>
+              <a
                 href="/auth/login"
                 className="text-gray-700 hover:text-blue-600"
               >
