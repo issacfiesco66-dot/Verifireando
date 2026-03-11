@@ -8,6 +8,11 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
+// Función para escapar caracteres especiales de regex y prevenir ReDoS
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Esquemas de validación
 const updateDriverSchema = Joi.object({
   name: Joi.string().min(2).max(100),
@@ -44,7 +49,7 @@ const locationSchema = Joi.object({
 router.get('/', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100);
     const skip = (page - 1) * limit;
     
     // Construir query base
@@ -69,7 +74,7 @@ router.get('/', async (req, res) => {
     
     // Filtro de búsqueda
     if (req.query.search) {
-      const searchTerm = req.query.search;
+      const searchTerm = escapeRegex(String(req.query.search).substring(0, 100));
       query.$or = [
         { name: { $regex: searchTerm, $options: 'i' } },
         { email: { $regex: searchTerm, $options: 'i' } },

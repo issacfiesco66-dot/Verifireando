@@ -6,19 +6,10 @@ const logger = require('../utils/logger');
 
 const router = express.Router();
 
-// Logging para todas las peticiones a /api/users
-router.use((req, res, next) => {
-  logger.info(`=== USERS ROUTE: ${req.method} ${req.originalUrl} ===`);
-  logger.info(`=== USERS ROUTE: req.userId = ${req.userId}, req.userRole = ${req.userRole} ===`);
-  next();
-});
-
-// Middleware catch-all para debugging
-router.use('*', (req, res, next) => {
-  logger.info(`=== USERS CATCH-ALL: ${req.method} ${req.originalUrl} ===`);
-  logger.info(`=== USERS CATCH-ALL: req.userId = ${req.userId}, req.userRole = ${req.userRole} ===`);
-  next();
-});
+// Función para escapar caracteres especiales de regex y prevenir ReDoS
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 // Esquemas de validación
 const updateUserSchema = Joi.object({
@@ -44,11 +35,24 @@ const updateUserSchema = Joi.object({
   })
 });
 
+// Esquema de validación para configuración
+const updateSettingsSchema = Joi.object({
+  settings: Joi.object({
+    notifications: Joi.object({
+      push: Joi.boolean(),
+      whatsapp: Joi.boolean(),
+      email: Joi.boolean()
+    }),
+    language: Joi.string().valid('es', 'en'),
+    theme: Joi.string().valid('light', 'dark', 'auto')
+  }).required()
+});
+
 // Obtener todos los usuarios (solo admin)
 router.get('/', auth, authorize('admin'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 100);
     const skip = (page - 1) * limit;
     
     const filter = {};
@@ -67,10 +71,11 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
     }
     
     if (req.query.search) {
+      const safeSearch = escapeRegex(String(req.query.search).substring(0, 100));
       filter.$or = [
-        { name: { $regex: req.query.search, $options: 'i' } },
-        { email: { $regex: req.query.search, $options: 'i' } },
-        { phone: { $regex: req.query.search, $options: 'i' } }
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { email: { $regex: safeSearch, $options: 'i' } },
+        { phone: { $regex: safeSearch, $options: 'i' } }
       ];
     }
 
@@ -100,20 +105,15 @@ router.get('/', auth, authorize('admin'), async (req, res) => {
 
 // Obtener configuración del usuario
 router.get('/settings', auth, async (req, res) => {
-  logger.info('=== SETTINGS ENDPOINT: START ===');
   try {
-    logger.info('=== SETTINGS ENDPOINT: INSIDE TRY ===');
-    
     // Respuesta simple para depurar
     res.json({ 
       message: 'Settings endpoint working',
       userId: req.userId,
       userRole: req.userRole
     });
-    
-    logger.info('=== SETTINGS ENDPOINT: RESPONSE SENT ===');
   } catch (error) {
-    logger.error('=== SETTINGS ENDPOINT: ERROR ===', error);
+    logger.error('Error obteniendo configuración del usuario:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
@@ -369,7 +369,7 @@ router.get('/:id/activity', auth, async (req, res) => {
     }
 
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
     const skip = (page - 1) * limit;
 
     // Obtener citas del usuario
@@ -402,7 +402,13 @@ router.get('/:id/activity', auth, async (req, res) => {
 // Actualizar configuración del usuario
 router.put('/settings', auth, async (req, res) => {
   try {
-    const { settings } = req.body;
+    const { error, value } = updateSettingsSchema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ 
+        message: 'Datos inválidos', 
+        errors: error.details.map(d => d.message) 
+      });
+    }
     
     const user = await User.findById(req.userId);
     
@@ -410,8 +416,8 @@ router.put('/settings', auth, async (req, res) => {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
 
-    // Actualizar preferencias del usuario
-    user.preferences = settings;
+    // Actualizar preferencias del usuario con datos validados
+    user.preferences = value.settings;
     await user.save();
 
     res.json({ message: 'Configuración actualizada exitosamente', settings: user.preferences });
@@ -419,16 +425,6 @@ router.put('/settings', auth, async (req, res) => {
     logger.error('Error actualizando configuración del usuario:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
-});
-
-// Endpoint de prueba público para verificar que el servidor funciona sin auth
-router.get('/test-public', async (req, res) => {
-  console.log('🔍 [DEBUG] Endpoint /users/test-public llamado');
-  res.json({ 
-    message: 'Este endpoint funciona sin autenticación', 
-    timestamp: new Date(),
-    server: 'Backend funcionando correctamente'
-  });
 });
 
 module.exports = router;

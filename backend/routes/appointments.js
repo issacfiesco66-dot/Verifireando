@@ -246,7 +246,7 @@ async function findAvailableDriver(pickupCoordinates, preferredDriverId = null) 
 router.get('/my-appointments', auth, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const skip = (page - 1) * limit;
 
     const filter = {};
@@ -301,7 +301,7 @@ router.get('/my-appointments', auth, async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const skip = (page - 1) * limit;
 
     const filter = {};

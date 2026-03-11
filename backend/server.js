@@ -90,45 +90,55 @@ mongoose.connect(mongoUri, {
 // Inicializar Firebase
 initializeFirebase();
 
-// Socket.IO para tiempo real
+// Socket.IO con autenticación JWT
+const jwt = require('jsonwebtoken');
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (!token) {
+    return next(new Error('Autenticación requerida'));
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId || decoded.id;
+    socket.userRole = decoded.role;
+    next();
+  } catch (err) {
+    return next(new Error('Token inválido'));
+  }
+});
+
 io.on('connection', (socket) => {
-  logger.info('Usuario conectado:', socket.id);
+  logger.info(`Usuario conectado: ${socket.id} (${socket.userId})`);
   
-  socket.on('join-user-room', (userId) => {
-    socket.join(`user-${userId}`);
-    logger.info(`Usuario ${socket.id} se unió a la sala user-${userId}`);
-  });
-  
-  socket.on('join-driver-room', (driverId) => {
-    socket.join(`driver-${driverId}`);
-    logger.info(`Driver ${socket.id} se unió a la sala driver-${driverId}`);
-  });
+  // Auto-join a su propia sala
+  socket.join(`user-${socket.userId}`);
+  if (socket.userRole === 'driver') {
+    socket.join(`driver-${socket.userId}`);
+  }
   
   socket.on('join-room', (room) => {
-    socket.join(room);
-    logger.info(`Usuario ${socket.id} se unió a la sala ${room}`);
+    // Solo permitir unirse a salas de appointment (validar formato)
+    if (typeof room === 'string' && room.startsWith('appointment-')) {
+      socket.join(room);
+    }
   });
   
   socket.on('driver-location', (data) => {
-    // Emitir a la sala de la cita
-    socket.to(data.appointmentId).emit('location-update', data);
+    // Solo drivers pueden emitir ubicación
+    if (socket.userRole !== 'driver') return;
+    if (!data?.appointmentId) return;
     
-    // También emitir con el evento que escucha el cliente
-    io.emit('driver-location-updated', {
-      appointmentId: data.appointmentId,
-      location: data.location,
-      timestamp: data.timestamp || new Date().toISOString()
-    });
-    
-    logger.info(`Ubicación del chofer actualizada para cita ${data.appointmentId}`);
+    socket.to(`appointment-${data.appointmentId}`).emit('location-update', data);
   });
   
   socket.on('appointment-status', (data) => {
-    socket.to(data.appointmentId).emit('status-update', data);
+    if (!data?.appointmentId) return;
+    socket.to(`appointment-${data.appointmentId}`).emit('status-update', data);
   });
   
   socket.on('disconnect', () => {
-    logger.info('Usuario desconectado:', socket.id);
+    logger.info(`Usuario desconectado: ${socket.id} (${socket.userId})`);
   });
 });
 

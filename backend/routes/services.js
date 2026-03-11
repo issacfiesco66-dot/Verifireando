@@ -205,7 +205,7 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/services/:id/book - Incrementar contador de reservas
-router.post('/:id/book', async (req, res) => {
+router.post('/:id/book', auth, async (req, res) => {
   try {
     const service = await Service.findByIdAndUpdate(
       req.params.id,

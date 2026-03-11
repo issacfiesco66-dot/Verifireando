@@ -115,22 +115,15 @@ router.post('/validate-coupon', auth, async (req, res) => {
 
 // Crear Payment Intent
 router.post('/create-intent', auth, async (req, res) => {
-  console.log('🔍 [DEBUG] Endpoint /create-intent llamado');
-  console.log('🔍 [DEBUG] Body recibido:', req.body);
-  console.log('🔍 [DEBUG] Usuario autenticado:', req.userId);
-  
   try {
     const { error, value } = createPaymentIntentSchema.validate(req.body);
     if (error) {
-      console.error('❌ [ERROR] Validación fallida:', error.details);
       return res.status(400).json({ 
         message: 'Datos inválidos', 
         errors: error.details.map(d => d.message) 
       });
     }
     
-    console.log('🔍 [DEBUG] Datos validados:', value);
-
     const appointment = await Appointment.findById(value.appointmentId)
       .populate('client', 'name email')
       .populate('car', 'plates brand model');
@@ -452,7 +445,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     logger.error('Error verificando webhook de Stripe:', err);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
+    return res.status(400).send('Webhook signature verification failed');
   }
 
   try {
@@ -523,7 +516,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 router.get('/', auth, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
     const skip = (page - 1) * limit;
     
     let filter = {};
@@ -853,108 +846,45 @@ router.get('/admin/stats', auth, authorize('admin'), async (req, res) => {
   }
 });
 
-// Endpoint de prueba sin auth
-router.get('/test-public', async (req, res) => {
-  console.log('🔍 [DEBUG] Endpoint /test-public llamado');
-  res.json({ message: 'Este endpoint funciona sin autenticación', timestamp: new Date() });
-});
-
-// Obtener mis pagos (endpoint para clientes) - TEMPORAL SIN AUTH
-router.get('/my-payments', async (req, res) => {
-  console.log('🔍 [DEBUG] Endpoint /my-payments llamado SIN middleware auth');
+// Obtener mis pagos (endpoint para clientes)
+router.get('/my-payments', auth, async (req, res) => {
   try {
-    console.log('🔍 [DEBUG] Preparando pagos de muestra...');
-    // Por ahora, devolver pagos de muestra para evitar errores de base de datos
-    const mockPayments = [
-      {
-        _id: 'pay_1',
-        appointment: {
-          appointmentNumber: 'APT-001',
-          scheduledDate: new Date('2025-12-20'),
-          status: 'completed'
-        },
-        paymentNumber: 'PAY-001',
-        amount: {
-          subtotal: 1200,
-          discount: 100,
-          taxes: 200,
-          total: 1300
-        },
-        status: 'completed',
-        method: 'credit_card',
-        createdAt: new Date('2025-12-20'),
-        description: 'Verificación vehicular completa'
-      },
-      {
-        _id: 'pay_2',
-        appointment: {
-          appointmentNumber: 'APT-002',
-          scheduledDate: new Date('2025-12-22'),
-          status: 'pending'
-        },
-        paymentNumber: 'PAY-002',
-        amount: {
-          subtotal: 600,
-          discount: 0,
-          taxes: 100,
-          total: 700
-        },
-        status: 'pending',
-        method: 'cash',
-        createdAt: new Date('2025-12-22'),
-        description: 'Cambio de aceite y filtros'
-      }
-    ];
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const skip = (page - 1) * limit;
 
-    console.log('🔍 [DEBUG] Enviando respuesta con', mockPayments.length, 'pagos');
+    const payments = await Payment.find({ client: req.userId })
+      .populate({
+        path: 'appointment',
+        select: 'appointmentNumber scheduledDate status car',
+        populate: { path: 'car', select: 'plates brand model' }
+      })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Payment.countDocuments({ client: req.userId });
+
     res.json({
-      payments: mockPayments,
+      payments,
       pagination: {
-        current: 1,
-        pages: 1,
-        total: mockPayments.length
+        current: page,
+        pages: Math.ceil(total / limit),
+        total
       }
     });
-    console.log('🔍 [DEBUG] Respuesta enviada exitosamente');
   } catch (error) {
-    console.error('❌ [ERROR] Error en /my-payments:', error);
     logger.error('Error obteniendo pagos del cliente:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
 
-// Obtener métodos de pago del cliente - TEMPORAL SIN AUTH
-router.get('/methods', async (req, res) => {
-  console.log('🔍 [DEBUG] Endpoint /methods llamado SIN middleware auth');
+// Obtener métodos de pago del cliente
+router.get('/methods', auth, async (req, res) => {
   try {
-    console.log('🔍 [DEBUG] Preparando métodos de pago de muestra...');
-    // Métodos de pago de muestra
-    const mockPaymentMethods = [
-      {
-        _id: 'pm_1',
-        type: 'card',
-        brand: 'visa',
-        last4: '4242',
-        expiryMonth: 12,
-        expiryYear: 2025,
-        isDefault: true
-      },
-      {
-        _id: 'pm_2',
-        type: 'card',
-        brand: 'mastercard',
-        last4: '5555',
-        expiryMonth: 8,
-        expiryYear: 2024,
-        isDefault: false
-      }
-    ];
-
-    console.log('🔍 [DEBUG] Enviando respuesta con', mockPaymentMethods.length, 'métodos de pago');
-    res.json(mockPaymentMethods);
-    console.log('🔍 [DEBUG] Respuesta enviada exitosamente');
+    // TODO: Implement real Stripe payment methods retrieval
+    res.json([]);
   } catch (error) {
-    console.error('❌ [ERROR] Error en /methods:', error);
     logger.error('Error obteniendo métodos de pago:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
