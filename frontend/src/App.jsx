@@ -20,6 +20,9 @@ import ContactPage from './pages/ContactPage'
 import PricingPage from './pages/PricingPage'
 import HowItWorksPage from './pages/HowItWorksPage'
 import ServicesPage from './pages/ServicesPage'
+import PrivacyPage from './pages/PrivacyPage'
+import TermsPage from './pages/TermsPage'
+import CookiesPage from './pages/CookiesPage'
 
 // Client Pages
 import ClientDashboard from './pages/client/Dashboard'
@@ -106,6 +109,9 @@ function App() {
           <Route path="pricing" element={<PricingPage />} />
           <Route path="services" element={<ServicesPage />} />
           <Route path="how-it-works" element={<HowItWorksPage />} />
+          <Route path="privacy" element={<PrivacyPage />} />
+          <Route path="terms" element={<TermsPage />} />
+          <Route path="cookies" element={<CookiesPage />} />
         </Route>
 
         {/* Auth Routes */}

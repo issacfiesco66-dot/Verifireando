@@ -86,16 +86,16 @@ const PublicLayout = () => {
               </ul>
             </div>
             <div>
-              <h4 className="text-md font-semibold mb-4">Soporte</h4>
+              <h4 className="text-md font-semibold mb-4">Legal</h4>
               <ul className="space-y-2 text-gray-300">
-                <li><a href="/help" className="hover:text-white">Ayuda</a></li>
-                <li><a href="/terms" className="hover:text-white">Términos</a></li>
-                <li><a href="/privacy" className="hover:text-white">Privacidad</a></li>
+                <li><a href="/terms" className="hover:text-white">Términos y Condiciones</a></li>
+                <li><a href="/privacy" className="hover:text-white">Política de Privacidad</a></li>
+                <li><a href="/cookies" className="hover:text-white">Política de Cookies</a></li>
               </ul>
             </div>
           </div>
           <div className="border-t border-gray-700 mt-8 pt-8 text-center text-gray-300">
-            <p>&copy; 2024 Verifireando. Todos los derechos reservados.</p>
+            <p>&copy; {new Date().getFullYear()} Verifireando. Todos los derechos reservados.</p>
           </div>
         </div>
       </footer>
