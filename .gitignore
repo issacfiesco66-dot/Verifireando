@@ -86,6 +86,9 @@ dist
 # Gatsby files
 .cache/
 public
+!frontend/public/sitemap.xml
+!frontend/public/robots.txt
+!frontend/public/llms.txt
 
 # Storybook build outputs
 .out
