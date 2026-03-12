@@ -157,6 +157,7 @@ export const authService = {
   logout: () => authAPI.post('/logout'),
   refreshToken: () => authAPI.post('/refresh-token'),
   forgotPassword: (email) => authAPI.post('/forgot-password', { email }),
+  validateResetToken: (token) => authAPI.post('/validate-reset-token', { token }),
   resetPassword: (token, password) => authAPI.post('/reset-password', { token, password }),
   verifyEmail: (token) => authAPI.post('/verify-email', { token }),
   resendVerification: (email, role = 'client') => authAPI.post('/resend-otp', { email, role }),

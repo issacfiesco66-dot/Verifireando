@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { Lock, Eye, EyeOff, CheckCircle } from 'lucide-react'
+import { Lock, Eye, EyeOff, CheckCircle, AlertCircle } from 'lucide-react'
 import { authService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 import { useAuth } from '../../contexts/AuthContext'
-import { auth } from '../../firebase'
-import { verifyPasswordResetCode } from 'firebase/auth'
 
 const ResetPassword = () => {
   const [showPassword, setShowPassword] = useState(false)
@@ -41,14 +39,8 @@ const ResetPassword = () => {
 
   const validateToken = async () => {
     try {
-      // Try Firebase validation first if oobCode exists
-      if (searchParams.get('oobCode')) {
-        await verifyPasswordResetCode(auth, token)
-      } else {
-        // Fallback to backend validation when using legacy token flow
-        const { authService } = await import('../../services/api')
-        await authService.validateResetToken(token)
-      }
+      // Validate token with backend
+      await authService.validateResetToken(token)
       setIsValidToken(true)
     } catch (error) {
       setIsValidToken(false)

@@ -13,7 +13,7 @@ import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/Login'
 import RegisterPage from './pages/auth/Register'
 import ForgotPasswordPage from './pages/auth/ForgotPassword'
-import ResetPasswordPage from './pages/auth/ResetPassword'
+import ResetPassword from './pages/auth/ResetPassword'
 import VerifyEmailPage from './pages/auth/VerifyEmail'
 import AboutPage from './pages/AboutPage'
 import ContactPage from './pages/ContactPage'
@@ -22,7 +22,7 @@ import HowItWorksPage from './pages/HowItWorksPage'
 import ServicesPage from './pages/ServicesPage'
 import PrivacyPage from './pages/PrivacyPage'
 import TermsPage from './pages/TermsPage'
-import CookiesPage from './pages/CookiesPage'
+import CookiesPage from './pages/CookiesPage';
 
 // Client Pages
 import ClientDashboard from './pages/client/Dashboard'
@@ -127,7 +127,7 @@ function App() {
           <Route path="register/driver" element={<RegisterPage />} />
 
           <Route path="forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="reset-password" element={<ResetPasswordPage />} />
+          <Route path="reset-password" element={<ResetPassword />} />
           <Route path="verify-email" element={<VerifyEmailPage />} />
         </Route>
 

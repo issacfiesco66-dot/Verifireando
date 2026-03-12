@@ -7,6 +7,7 @@ const Driver = require('../models/Driver');
 const { auth } = require('../middleware/auth');
 const { verifyFirebaseIdToken } = require('../config/firebase');
 const logger = require('../utils/logger');
+const { sendPasswordResetEmail, sendPasswordResetConfirmation } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -798,9 +799,16 @@ router.post('/forgot-password', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    // Aquí enviarías email con el token
-    // Por ahora, solo devolvemos éxito
-    logger.info(`Password reset request for: ${email}`);
+    // Enviar email con el token
+    const emailSent = await sendPasswordResetEmail(email, resetToken);
+    
+    if (!emailSent) {
+      return res.status(500).json({ 
+        message: 'Error al enviar el email de recuperación. Intenta más tarde.' 
+      });
+    }
+    
+    logger.info(`Password reset email sent to: ${email}`);
     
     res.json({ 
       message: 'Si el email está registrado, recibirás instrucciones para recuperar tu contraseña',
@@ -810,6 +818,46 @@ router.post('/forgot-password', async (req, res) => {
 
   } catch (error) {
     logger.error('Error en forgot password:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Validate reset token
+router.post('/validate-reset-token', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ message: 'El token es requerido' });
+    }
+
+    // Verificar token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    if (decoded.type !== 'password-reset') {
+      return res.status(400).json({ 
+        message: 'Token inválido' 
+      });
+    }
+
+    // Buscar usuario para verificar que existe
+    let user = await User.findById(decoded.userId);
+    if (!user) {
+      user = await Driver.findById(decoded.userId);
+    }
+
+    if (!user) {
+      return res.status(400).json({ message: 'Token inválido o expirado' });
+    }
+
+    res.json({ valid: true });
+
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(400).json({ message: 'Token inválido o expirado' });
+    }
+    
+    logger.error('Error en validate reset token:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
@@ -854,6 +902,9 @@ router.post('/reset-password', async (req, res) => {
 
     user.password = newPassword;
     await user.save();
+
+    // Enviar email de confirmación
+    await sendPasswordResetConfirmation(user.email);
 
     logger.info(`Password reset successful for: ${user.email}`);
     
