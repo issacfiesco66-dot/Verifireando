@@ -72,7 +72,7 @@ if (process.env.NODE_ENV === 'production') {
   console.log('⚠️  ADVERTENCIA: Estás a punto de limpiar la base de datos de PRODUCCIÓN');
   console.log('Escribe "CONFIRMAR" para continuar:');
   process.stdin.once('data', (data) => {
-    if (data.toString().trim() === 'CONFIRMAR') {
+    if (data.toString().trim().toUpperCase() === 'CONFIRMAR') {
       cleanDatabase();
     } else {
       console.log('❌ Operación cancelada');
