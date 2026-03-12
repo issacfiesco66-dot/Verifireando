@@ -11,7 +11,9 @@ const User = require('./models/User');
 
 async function createAdmin() {
   try {
-    await mongoose.connect(process.env.MONGO_URI);
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+    if (!mongoUri) throw new Error('MONGODB_URI o MONGO_URI no configurada en .env');
+    await mongoose.connect(mongoUri);
     console.log('✅ Conectado a MongoDB');
 
     const email = 'djonny319@gmail.com';
