@@ -18,6 +18,12 @@ import { paymentService } from '../../services/api'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
 
+const X_ICON = ({ className }) => (
+  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+)
+
 const Payments = () => {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
@@ -28,6 +34,12 @@ const Payments = () => {
   const [statusFilter, setStatusFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('history')
+  const [showDetailModal, setShowDetailModal] = useState(false)
+  const [selectedPaymentDetail, setSelectedPaymentDetail] = useState(null)
+  const [showAddMethodModal, setShowAddMethodModal] = useState(false)
+  const [addMethodForm, setAddMethodForm] = useState({ cardNumber: '', expiry: '', cvv: '', name: '' })
+  const [addingMethod, setAddingMethod] = useState(false)
+  const [settingDefault, setSettingDefault] = useState(null)
 
   useEffect(() => {
     fetchPayments()
@@ -218,18 +230,37 @@ const Payments = () => {
   }
 
   const showPaymentDetails = (payment) => {
-    const details = `
-      💳 ID del Pago: ${payment._id || 'N/A'}
-      📋 Número de Cita: ${payment.appointmentNumber || 'N/A'}
-      💰 Monto: $${payment.amount || 'N/A'}
-      📅 Fecha: ${new Date(payment.createdAt).toLocaleDateString('es-MX')}
-      ⏰ Hora: ${new Date(payment.createdAt).toLocaleTimeString('es-MX')}
-      🔄 Estado: ${getStatusText(payment.status)}
-      💳 Método: ${getMethodText(payment.method)}
-      📝 Descripción: ${payment.description || 'Sin descripción'}
-    `
-    
-    alert(details.trim())
+    setSelectedPaymentDetail(payment)
+    setShowDetailModal(true)
+  }
+
+  const handleSetDefault = async (methodId) => {
+    try {
+      setSettingDefault(methodId)
+      await paymentService.setDefaultPaymentMethod(methodId)
+      setPaymentMethods(prev => prev.map(m => ({ ...m, isDefault: (m._id || m.id) === methodId })))
+      toast.success('Método predeterminado actualizado')
+    } catch (error) {
+      toast.error('Error al actualizar el método predeterminado')
+    } finally {
+      setSettingDefault(null)
+    }
+  }
+
+  const handleAddMethod = async (e) => {
+    e.preventDefault()
+    try {
+      setAddingMethod(true)
+      const res = await paymentService.addPaymentMethod(addMethodForm)
+      setPaymentMethods(prev => [...prev, res.data])
+      toast.success('Método de pago agregado')
+      setShowAddMethodModal(false)
+      setAddMethodForm({ cardNumber: '', expiry: '', cvv: '', name: '' })
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al agregar el método de pago')
+    } finally {
+      setAddingMethod(false)
+    }
   }
 
   const getMethodText = (method) => {
@@ -475,7 +506,7 @@ const Payments = () => {
                     Gestiona tus tarjetas y métodos de pago guardados
                   </p>
                 </div>
-                <button className="btn btn-primary btn-md flex items-center space-x-2">
+                <button onClick={() => setShowAddMethodModal(true)} className="btn btn-primary btn-md flex items-center space-x-2">
                   <Plus className="w-4 h-4" />
                   <span>Agregar método</span>
                 </button>
@@ -512,8 +543,12 @@ const Payments = () => {
 
                       <div className="flex items-center justify-end space-x-2">
                         {!method.isDefault && (
-                          <button className="btn btn-secondary btn-sm">
-                            Hacer predeterminada
+                          <button
+                            onClick={() => handleSetDefault(method._id || method.id)}
+                            disabled={settingDefault === (method._id || method.id)}
+                            className="btn btn-secondary btn-sm"
+                          >
+                            {settingDefault === (method._id || method.id) ? 'Guardando...' : 'Hacer predeterminada'}
                           </button>
                         )}
                         <button
@@ -536,7 +571,7 @@ const Payments = () => {
                   <p className="text-gray-600 mb-6">
                     Agrega una tarjeta para realizar pagos más rápido
                   </p>
-                  <button className="btn btn-primary btn-md flex items-center space-x-2 mx-auto">
+                  <button onClick={() => setShowAddMethodModal(true)} className="btn btn-primary btn-md flex items-center space-x-2 mx-auto">
                     <Plus className="w-4 h-4" />
                     <span>Agregar método de pago</span>
                   </button>
@@ -546,6 +581,73 @@ const Payments = () => {
           )}
         </div>
       </div>
+      {/* Payment Detail Modal */}
+      {showDetailModal && selectedPaymentDetail && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Detalle del Pago</h3>
+              <button onClick={() => setShowDetailModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X_ICON className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-3 text-sm">
+              <div className="flex justify-between"><span className="text-gray-500">ID del Pago</span><span className="font-mono font-medium">{selectedPaymentDetail._id || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Número de Cita</span><span className="font-medium">{selectedPaymentDetail.appointmentNumber || 'N/A'}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Monto</span><span className="font-bold text-lg">{formatAmount(selectedPaymentDetail.amount)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Fecha</span><span className="font-medium">{formatDate(selectedPaymentDetail.createdAt)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Estado</span><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedPaymentDetail.status)}`}>{getStatusText(selectedPaymentDetail.status)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Método</span><span className="font-medium">{getMethodText(selectedPaymentDetail.method)}</span></div>
+              {selectedPaymentDetail.description && <div className="flex justify-between"><span className="text-gray-500">Descripción</span><span className="font-medium">{selectedPaymentDetail.description}</span></div>}
+              {selectedPaymentDetail.transactionId && <div className="flex justify-between"><span className="text-gray-500">Transacción</span><span className="font-mono text-xs">{selectedPaymentDetail.transactionId}</span></div>}
+            </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end">
+              <button onClick={() => setShowDetailModal(false)} className="btn btn-secondary btn-md">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Payment Method Modal */}
+      {showAddMethodModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Agregar Método de Pago</h3>
+              <button onClick={() => setShowAddMethodModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
+                <X_ICON className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleAddMethod} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre en la tarjeta *</label>
+                <input type="text" required value={addMethodForm.name} onChange={e => setAddMethodForm(p => ({...p, name: e.target.value}))} className="input input-md w-full" placeholder="Juan Pérez" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Número de tarjeta *</label>
+                <input type="text" required maxLength={19} value={addMethodForm.cardNumber} onChange={e => setAddMethodForm(p => ({...p, cardNumber: e.target.value.replace(/\D/g,'').replace(/(.{4})/g,'$1 ').trim()}))} className="input input-md w-full font-mono" placeholder="0000 0000 0000 0000" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Vencimiento *</label>
+                  <input type="text" required maxLength={5} value={addMethodForm.expiry} onChange={e => setAddMethodForm(p => ({...p, expiry: e.target.value.replace(/\D/g,'').replace(/(\d{2})(\d)/,'$1/$2')}))} className="input input-md w-full font-mono" placeholder="MM/AA" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">CVV *</label>
+                  <input type="password" required maxLength={4} value={addMethodForm.cvv} onChange={e => setAddMethodForm(p => ({...p, cvv: e.target.value.replace(/\D/g,'')}))} className="input input-md w-full font-mono" placeholder="123" />
+                </div>
+              </div>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700">
+                Tus datos de pago son encriptados y protegidos de forma segura.
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowAddMethodModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={addingMethod} className="btn btn-primary btn-md">{addingMethod ? 'Agregando...' : 'Agregar tarjeta'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

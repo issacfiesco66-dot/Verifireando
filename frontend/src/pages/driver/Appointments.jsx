@@ -15,6 +15,7 @@ import {
   Search,
   Route
 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSocket } from '../../contexts/SocketContext'
 import { appointmentService } from '../../services/api'
@@ -24,6 +25,7 @@ import toast from 'react-hot-toast'
 const Appointments = () => {
   const { user } = useAuth()
   const { socket } = useSocket()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [appointments, setAppointments] = useState([])
   const [filteredAppointments, setFilteredAppointments] = useState([])
@@ -246,21 +248,6 @@ const Appointments = () => {
     setDateFilter('all')
   }
 
-  const showAppointmentDetails = (appointment) => {
-    const details = `
-      📋 Número: ${appointment.appointmentNumber || 'N/A'}
-      👤 Cliente: ${appointment.client?.name || 'N/A'}
-      📞 Teléfono: ${appointment.client?.phone || 'N/A'}
-      📍 Dirección: ${appointment.pickupAddress?.street || 'N/A'}
-      📅 Fecha: ${new Date(appointment.scheduledDate).toLocaleDateString('es-MX')}
-      🕐 Hora: ${appointment.timeSlot?.start || 'N/A'}
-      🚗 Vehículo: ${appointment.car?.brand} ${appointment.car?.model} (${appointment.car?.plates})
-      💰 Precio: $${appointment.totalPrice || 'N/A'}
-      📝 Notas: ${appointment.notes || 'Sin notas'}
-    `
-    
-    alert(details.trim())
-  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -479,7 +466,7 @@ const Appointments = () => {
                         <span>Navegar</span>
                       </button>
                       <button 
-                        onClick={() => showAppointmentDetails(appointment)}
+                        onClick={() => navigate(`/driver/appointments/${appointment._id || appointment.id}`)}
                         className="btn btn-primary btn-sm flex items-center space-x-2"
                       >
                         <Eye className="w-4 h-4" />
