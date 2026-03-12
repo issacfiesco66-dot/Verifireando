@@ -694,9 +694,11 @@ router.post('/', auth, async (req, res) => {
 router.put('/:id/status', auth, async (req, res) => {
   try {
     const { id } = req.params;
+    logger.info(`[STATUS] id=${id} body=${JSON.stringify(req.body)} userId=${req.userId} role=${req.userRole}`);
     const { error, value } = updateStatusSchema.validate(req.body);
     
     if (error) {
+      logger.warn(`[STATUS] Joi error: ${error.details.map(d => d.message).join(', ')} body=${JSON.stringify(req.body)}`);
       return res.status(400).json({ 
         message: 'Datos inválidos', 
         errors: error.details.map(d => d.message) 
