@@ -60,7 +60,7 @@ const HomePage = () => {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to="/auth/register"
-                className="btn btn-white btn-lg px-8 py-4 text-primary-600 hover:text-primary-700"
+                className="btn btn-lg px-8 py-4 bg-white text-primary-700 hover:bg-primary-50 font-semibold rounded-xl shadow-md"
               >
                 Soy Cliente
                 <ArrowRight className="ml-2 w-5 h-5" />
