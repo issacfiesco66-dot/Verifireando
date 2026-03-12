@@ -95,21 +95,40 @@ mongoose.connect(mongoUri, {
 // Inicializar Firebase
 initializeFirebase();
 
-// Socket.IO con autenticación JWT
+// Socket.IO con autenticación JWT o Firebase
 const jwt = require('jsonwebtoken');
+const { verifyFirebaseIdToken } = require('./config/firebase');
+const User = require('./models/User');
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
   if (!token) {
     return next(new Error('Autenticación requerida'));
   }
+  // Try JWT first
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    socket.userId = decoded.userId || decoded.id;
+    socket.userId = decoded.id || decoded.userId;
     socket.userRole = decoded.role;
-    next();
-  } catch (err) {
-    return next(new Error('Token inválido'));
+    return next();
+  } catch (jwtErr) {
+    // Fall back to Firebase ID token
+    try {
+      const firebaseDecoded = await verifyFirebaseIdToken(token);
+      if (!firebaseDecoded) return next(new Error('Token inválido'));
+      const email = firebaseDecoded.email;
+      if (email) {
+        const user = await User.findOne({ email }).select('_id role');
+        if (user) {
+          socket.userId = user._id.toString();
+          socket.userRole = user.role;
+          return next();
+        }
+      }
+      return next(new Error('Usuario no encontrado'));
+    } catch (fbErr) {
+      return next(new Error('Token inválido'));
+    }
   }
 });
 

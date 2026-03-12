@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Download, X, Smartphone, Monitor, Wifi, WifiOff } from 'lucide-react'
 import pwaService from '../../services/pwaService'
-import logger from '../../utils/logger'
 
 const PWAInstallPrompt = () => {
   if (import.meta.env.DEV) {
@@ -70,7 +69,7 @@ const PWAInstallPrompt = () => {
         setIsInstalling(false)
       }
     } catch (error) {
-      logger.pwa('Error installing app:', error)
+      console.warn('Error installing app:', error)
       setIsInstalling(false)
     }
   }
@@ -178,7 +177,7 @@ export const PWAStatus = () => {
     try {
       await pwaService.updateServiceWorker()
     } catch (error) {
-      logger.pwa('Error updating app:', error)
+      console.warn('Error updating app:', error)
       setIsUpdating(false)
     }
   }
@@ -187,7 +186,7 @@ export const PWAStatus = () => {
     try {
       await pwaService.showInstallPrompt()
     } catch (error) {
-      logger.pwa('Error installing app:', error)
+      console.log('Error installing app:', error)
     }
   }
 

@@ -22,6 +22,7 @@ import { userService, driverService } from '../../services/api'
 import { useForm } from 'react-hook-form'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
+import logger from '../../utils/logger'
 
 const Profile = () => {
   const { user, updateUser } = useAuth()
@@ -97,7 +98,7 @@ const Profile = () => {
         const statsResponse = await driverService.getStats()
         setDriverStats(statsResponse.data)
       } catch (statsError) {
-        logger.warn('Error cargando estadísticas:', statsError)
+        console.warn('Error cargando estadísticas:', statsError)
         // Continuar sin estadísticas
       }
       
@@ -119,7 +120,7 @@ const Profile = () => {
           })
         }
       } catch (profileError) {
-        logger.warn('Error cargando perfil, usando datos del contexto:', profileError)
+        console.warn('Error cargando perfil, usando datos del contexto:', profileError)
         // Si falla, usar datos del contexto
         if (user && !personalForm.formState.isDirty) {
           personalForm.reset({
