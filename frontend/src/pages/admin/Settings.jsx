@@ -258,8 +258,11 @@ const Settings = () => {
     try {
       const formData = new FormData()
       formData.append('settings', file)
-      const data = await adminService.importSettings(formData)
-      setSettings(data)
+      const res = await adminService.importSettings(formData)
+      const d = res.data
+      if (d && typeof d === 'object') {
+        setSettings(prev => ({ ...prev, ...d }))
+      }
       toast.success('Configuración importada exitosamente')
     } catch (error) {
       console.error('Error importing settings:', error)
