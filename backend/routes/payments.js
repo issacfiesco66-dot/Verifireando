@@ -874,8 +874,8 @@ router.get('/my-payments', auth, async (req, res) => {
       }
     });
   } catch (error) {
-    logger.error('Error obteniendo pagos del cliente:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
+    logger.error(`[PAYMENTS] my-payments error: ${error.message} stack: ${error.stack}`);
+    res.status(500).json({ message: 'Error interno del servidor', detail: error.message });
   }
 });
 

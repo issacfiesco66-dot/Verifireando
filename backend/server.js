@@ -56,7 +56,15 @@ app.use(cors({
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: process.env.NODE_ENV === 'development' ? 1000 : 100 // 1000 en desarrollo, 100 en producción
+  max: process.env.NODE_ENV === 'development' ? 2000 : 500,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false
 });
 app.use(limiter);
 
@@ -184,7 +192,7 @@ app.use((req, res, next) => {
 });
 
 // Rutas
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/drivers', driverRoutes);
 app.use('/api/cars', carRoutes);
