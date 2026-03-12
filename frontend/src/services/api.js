@@ -284,9 +284,12 @@ export const adminService = {
   deleteAppointment: (id) => appointmentAPI.delete(`/admin/appointments/${id}`),
   
   // Payments management
-  getPayments: (params) => paymentAPI.get('/admin/payments', { params }),
-  getPaymentById: (id) => paymentAPI.get(`/admin/payments/${id}`),
-  updatePayment: (id, data) => paymentAPI.put(`/admin/payments/${id}`, data),
+  getPayments: (params) => paymentAPI.get('/', { params }),
+  getPaymentById: (id) => paymentAPI.get(`/${id}`),
+  updatePayment: (id, data) => paymentAPI.put(`/${id}`, data),
+  getPaymentAnalytics: (params) => paymentAPI.get('/admin/stats', { params }),
+  processRefund: (id, data) => paymentAPI.post(`/${id}/refund`, data),
+  exportPayments: (params) => paymentAPI.get('/', { params }),
   
   // Reports and analytics
   getDashboardStats: () => api.get('/admin/dashboard/stats'),

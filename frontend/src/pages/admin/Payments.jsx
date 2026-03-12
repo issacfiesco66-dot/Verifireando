@@ -81,8 +81,8 @@ const Payments = () => {
   const fetchPayments = async () => {
     try {
       setLoading(true)
-      const data = await adminService.getPayments()
-      setPayments(data)
+      const res = await adminService.getPayments({ limit: 100 })
+      setPayments(Array.isArray(res.data?.payments) ? res.data.payments : [])
     } catch (error) {
       console.error('Error fetching payments:', error)
       toast.error('Error al cargar los pagos')
@@ -93,8 +93,19 @@ const Payments = () => {
 
   const fetchAnalytics = async () => {
     try {
-      const data = await adminService.getPaymentAnalytics()
-      setAnalytics(data)
+      const res = await adminService.getPaymentAnalytics()
+      const d = res.data
+      setAnalytics({
+        totalRevenue: d?.overview?.totalRevenue || 0,
+        totalTransactions: d?.overview?.totalPayments || 0,
+        averageTransaction: d?.overview?.totalPayments > 0
+          ? (d.overview.totalRevenue / d.overview.totalPayments)
+          : 0,
+        successRate: parseFloat(d?.overview?.completionRate || 0),
+        monthlyGrowth: 0,
+        topPaymentMethods: Object.entries(d?.paymentsByMethod || {}).map(([k, v]) => ({ method: k, ...v })),
+        revenueByMonth: d?.dailyPayments || []
+      })
     } catch (error) {
       console.error('Error fetching analytics:', error)
     }
@@ -179,7 +190,7 @@ const Payments = () => {
 
   const handleRefundPayment = (payment) => {
     setPaymentToRefund(payment)
-    setRefundAmount(payment.amount.toString())
+    setRefundAmount((payment.amount?.total ?? payment.amount ?? 0).toString())
     setRefundReason('')
     setShowRefundModal(true)
   }
@@ -208,9 +219,21 @@ const Payments = () => {
     }
   }
 
-  const exportPayments = async () => {
+  const exportPayments = () => {
     try {
-      const blob = await adminService.exportPayments()
+      const rows = [
+        ['ID', 'Fecha', 'Cliente', 'Monto', 'Método', 'Estado'],
+        ...filteredPayments.map(p => [
+          p._id,
+          new Date(p.createdAt).toLocaleDateString('es-MX'),
+          p.client?.name || '',
+          (p.amount?.total ?? p.amount ?? 0),
+          p.method || p.paymentMethod || '',
+          p.status
+        ])
+      ]
+      const csv = rows.map(r => r.join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
