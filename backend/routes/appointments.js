@@ -123,11 +123,12 @@ const updateStatusSchema = Joi.object({
     'in_verification', 'completed', 'delivered', 'cancelled'
   ).required(),
   notes: Joi.string().max(500).allow(''),
+  driverNotes: Joi.string().max(500).allow(''),
   location: Joi.object({
     lat: Joi.number().min(-90).max(90),
     lng: Joi.number().min(-180).max(180)
   })
-});
+}).unknown(true);
 
 const ratingSchema = Joi.object({
   rating: Joi.number().min(1).max(5).required(),
