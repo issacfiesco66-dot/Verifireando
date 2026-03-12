@@ -314,7 +314,7 @@ const Drivers = () => {
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">En línea</p>
               <p className="text-2xl font-bold text-gray-900">
-                {onlineDrivers?.length || 0}
+                {drivers.filter(d => d.isOnline).length}
               </p>
             </div>
           </div>
