@@ -30,8 +30,13 @@ const allowNoOrigin = true; // Permitir siempre: CORS es solo para browsers, no 
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
-    methods: ["GET", "POST"]
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, allowNoOrigin);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(null, true); // Allow all origins for WebSocket
+    },
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
