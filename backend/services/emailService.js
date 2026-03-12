@@ -1,25 +1,37 @@
 const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 
+// Verificar si SMTP está configurado
+const isSmtpConfigured = () => {
+  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+};
+
 // Configuración del transporter
 const createTransporter = () => {
   return nodemailer.createTransporter({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: process.env.SMTP_PORT || 587,
-    secure: false, // true para 465, false para otros puertos
+    port: parseInt(process.env.SMTP_PORT) || 587,
+    secure: false,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
+    },
+    tls: {
+      rejectUnauthorized: false
     }
   });
 };
 
 // Función para enviar email de recuperación de contraseña
-const sendPasswordResetEmail = async (email, resetToken) => {
+const sendPasswordResetEmail = async (email, name, resetToken) => {
+  if (!isSmtpConfigured()) {
+    logger.warn(`SMTP no configurado. Email de recuperación NO enviado a ${email}. Token: ${resetToken}`);
+    return false;
+  }
   try {
     const transporter = createTransporter();
     
-    const resetUrl = `${process.env.FRONTEND_URL || 'https://www.verificandoando.com.mx'}/reset-password?token=${resetToken}`;
+    const resetUrl = `${process.env.FRONTEND_URL || 'https://www.verificandoando.com.mx'}/auth/reset-password?token=${resetToken}`;
     
     const mailOptions = {
       from: `"Verifireando" <${process.env.SMTP_USER}>`,
@@ -38,7 +50,7 @@ const sendPasswordResetEmail = async (email, resetToken) => {
             .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
             .button { display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
             .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
-            .code { background: #f3f4f6; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 16px; margin: 20px 0; }
+            .code { background: #f3f4f6; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 14px; margin: 20px 0; word-break: break-all; }
           </style>
         </head>
         <body>
@@ -48,7 +60,7 @@ const sendPasswordResetEmail = async (email, resetToken) => {
           </div>
           
           <div class="content">
-            <h2>Hola,</h2>
+            <h2>Hola${name ? ', ' + name : ''},</h2>
             <p>Recibimos una solicitud para recuperar la contraseña de tu cuenta.</p>
             
             <p>Para continuar con el proceso de recuperación, haz clic en el siguiente botón:</p>
@@ -89,7 +101,11 @@ const sendPasswordResetEmail = async (email, resetToken) => {
 };
 
 // Función para enviar email de confirmación de reset
-const sendPasswordResetConfirmation = async (email) => {
+const sendPasswordResetConfirmation = async (email, name) => {
+  if (!isSmtpConfigured()) {
+    logger.warn(`SMTP no configurado. Email de confirmación NO enviado a ${email}`);
+    return false;
+  }
   try {
     const transporter = createTransporter();
     
@@ -119,6 +135,7 @@ const sendPasswordResetConfirmation = async (email) => {
           </div>
           
           <div class="content">
+            <h2>Hola${name ? ', ' + name : ''},</h2>
             <div class="success">
               ✅ ¡Tu contraseña ha sido actualizada exitosamente!
             </div>
@@ -158,6 +175,10 @@ const sendPasswordResetConfirmation = async (email) => {
 
 // Función para enviar código de verificación por email
 const sendVerificationEmailOTP = async (email, name, code, role = 'client') => {
+  if (!isSmtpConfigured()) {
+    logger.warn(`SMTP no configurado. OTP email NO enviado a ${email}. Código: ${code}`);
+    return false;
+  }
   try {
     const transporter = createTransporter();
     

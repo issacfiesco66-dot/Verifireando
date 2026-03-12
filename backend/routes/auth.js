@@ -815,20 +815,19 @@ router.post('/forgot-password', async (req, res) => {
       { expiresIn: '1h' }
     );
 
-    // Enviar email con el token
+    // Intentar enviar email (no bloqueante - siempre devolver 200)
     const emailSent = await sendPasswordResetEmail(email, user.name, resetToken);
     
-    if (!emailSent) {
-      return res.status(500).json({ 
-        message: 'Error al enviar el email de recuperación. Intenta más tarde.' 
-      });
+    if (emailSent) {
+      logger.info(`Password reset email sent to: ${email}`);
+    } else {
+      // SMTP no configurado o error: loguear token para recuperación manual
+      logger.warn(`SMTP no disponible. Token de recuperación para ${email}: ${resetToken}`);
     }
     
-    logger.info(`Password reset email sent to: ${email}`);
-    
+    // Siempre responder 200 por seguridad (no revelar si email existe)
     res.json({ 
       message: 'Si el email está registrado, recibirás instrucciones para recuperar tu contraseña',
-      // En desarrollo, devolvemos el token para pruebas
       ...(process.env.NODE_ENV === 'development' && { resetToken })
     });
 
@@ -881,7 +880,8 @@ router.post('/validate-reset-token', async (req, res) => {
 // Reset password
 router.post('/reset-password', async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
+    const { token } = req.body;
+    const newPassword = req.body.newPassword || req.body.password;
 
     if (!token || !newPassword) {
       return res.status(400).json({ 
@@ -919,8 +919,10 @@ router.post('/reset-password', async (req, res) => {
     user.password = newPassword;
     await user.save();
 
-    // Enviar email de confirmación
-    await sendPasswordResetConfirmation(user.email);
+    // Enviar email de confirmación (no bloqueante)
+    sendPasswordResetConfirmation(user.email, user.name).catch(err => 
+      logger.error('Error enviando confirmación de reset:', err)
+    );
 
     logger.info(`Password reset successful for: ${user.email}`);
     
