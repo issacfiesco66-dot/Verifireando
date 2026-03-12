@@ -112,23 +112,32 @@ io.use(async (socket, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.userId = decoded.id || decoded.userId;
     socket.userRole = decoded.role;
+    logger.info(`[SOCKET] JWT auth OK: userId=${socket.userId}`);
     return next();
   } catch (jwtErr) {
+    logger.info(`[SOCKET] JWT failed (${jwtErr.message}), trying Firebase...`);
     // Fall back to Firebase ID token
     try {
       const firebaseDecoded = await verifyFirebaseIdToken(token);
-      if (!firebaseDecoded) return next(new Error('Token inválido'));
+      if (!firebaseDecoded) {
+        logger.warn('[SOCKET] Firebase returned null');
+        return next(new Error('Token inválido'));
+      }
       const email = firebaseDecoded.email;
+      logger.info(`[SOCKET] Firebase decoded email=${email}`);
       if (email) {
         const user = await User.findOne({ email }).select('_id role');
         if (user) {
           socket.userId = user._id.toString();
           socket.userRole = user.role;
+          logger.info(`[SOCKET] Firebase auth OK: userId=${socket.userId}`);
           return next();
         }
+        logger.warn(`[SOCKET] User not found for email=${email}`);
       }
       return next(new Error('Usuario no encontrado'));
     } catch (fbErr) {
+      logger.warn(`[SOCKET] Firebase error: ${fbErr.message}`);
       return next(new Error('Token inválido'));
     }
   }
