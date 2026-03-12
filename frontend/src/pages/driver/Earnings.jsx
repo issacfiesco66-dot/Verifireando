@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react'
 import { 
-  DollarSign, 
   TrendingUp, 
   Calendar, 
   Clock,
   MapPin,
   Download,
-  Filter,
-  ChevronDown
+  CheckCircle
 } from 'lucide-react'
+import { appointmentService } from '../../services/api'
+import toast from 'react-hot-toast'
 
 const Earnings = () => {
-  const [earnings, setEarnings] = useState([])
+  const [completedAppointments, setCompletedAppointments] = useState([])
   const [summary, setSummary] = useState({
     today: 0,
     week: 0,
@@ -28,109 +28,76 @@ const Earnings = () => {
   const fetchEarnings = async () => {
     setLoading(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      const response = await appointmentService.getMyAppointments()
+      const appointments = response.data?.appointments || response.data || []
       
-      // Mock data
-      const mockEarnings = [
-        {
-          id: 1,
-          date: '2024-01-15',
-          time: '09:30',
-          service: 'Verificación Vehicular',
-          location: 'Polanco, CDMX',
-          amount: 450,
-          commission: 67.5,
-          status: 'completed'
-        },
-        {
-          id: 2,
-          date: '2024-01-15',
-          time: '14:15',
-          service: 'Verificación + Lavado',
-          location: 'Roma Norte, CDMX',
-          amount: 650,
-          commission: 97.5,
-          status: 'completed'
-        },
-        {
-          id: 3,
-          date: '2024-01-14',
-          time: '11:00',
-          service: 'Verificación Vehicular',
-          location: 'Satelite, EdoMéx',
-          amount: 450,
-          commission: 67.5,
-          status: 'completed'
-        }
-      ]
+      const completed = appointments.filter(a => a.status === 'completed' || a.status === 'delivered')
 
-      setEarnings(mockEarnings)
+      const now = new Date()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const startOfWeek = new Date(startOfToday)
+      startOfWeek.setDate(startOfToday.getDate() - startOfToday.getDay())
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+
       setSummary({
-        today: 165,
-        week: 232.5,
-        month: 1250,
-        total: 15680
+        today: completed.filter(a => new Date(a.updatedAt || a.createdAt) >= startOfToday).length,
+        week: completed.filter(a => new Date(a.updatedAt || a.createdAt) >= startOfWeek).length,
+        month: completed.filter(a => new Date(a.updatedAt || a.createdAt) >= startOfMonth).length,
+        total: completed.length
       })
+
+      setCompletedAppointments(completed)
     } catch (error) {
-      console.error('Error fetching earnings:', error)
+      console.error('Error fetching appointments:', error)
+      toast.error('Error al cargar el historial de servicios')
     } finally {
       setLoading(false)
     }
   }
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-MX', {
-      style: 'currency',
-      currency: 'MXN'
-    }).format(amount)
+  const getFilteredAppointments = () => {
+    const now = new Date()
+    const startOfWeek = new Date(now)
+    startOfWeek.setDate(now.getDate() - now.getDay())
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfYear = new Date(now.getFullYear(), 0, 1)
+
+    return completedAppointments.filter(a => {
+      const date = new Date(a.updatedAt || a.createdAt)
+      if (selectedPeriod === 'week') return date >= startOfWeek
+      if (selectedPeriod === 'month') return date >= startOfMonth
+      if (selectedPeriod === 'year') return date >= startOfYear
+      return true
+    })
   }
 
   const exportEarnings = () => {
     try {
-      // Crear contenido CSV
-      const headers = ['Fecha', 'Hora', 'Servicio', 'Ubicación', 'Monto', 'Comisión', 'Estado']
+      const filtered = getFilteredAppointments()
+      const headers = ['Fecha', 'Número de cita', 'Dirección', 'Estado']
       const csvContent = [
         headers.join(','),
-        ...earnings.map(earning => [
-          earning.date,
-          earning.time,
-          `"${earning.service}"`,
-          `"${earning.location}"`,
-          earning.amount,
-          earning.commission,
-          earning.status
+        ...filtered.map(a => [
+          new Date(a.scheduledDate || a.createdAt).toLocaleDateString('es-MX'),
+          a.appointmentNumber || a._id,
+          `"${a.address || a.pickupAddress || ''}"`,
+          a.status
         ].join(','))
       ].join('\n')
-      
-      // Agregar resumen al final
-      const summaryContent = [
-        '',
-        'RESUMEN',
-        `Hoy,${formatCurrency(summary.today)}`,
-        `Esta semana,${formatCurrency(summary.week)}`,
-        `Este mes,${formatCurrency(summary.month)}`,
-        `Total,${formatCurrency(summary.total)}`
-      ].join('\n')
-      
-      const finalContent = csvContent + summaryContent
-      
-      // Crear y descargar el archivo
-      const blob = new Blob([finalContent], { type: 'text/csv;charset=utf-8;' })
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
       const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `ganancias_${selectedPeriod}_${new Date().toISOString().split('T')[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `servicios_${selectedPeriod}_${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(anchor)
+      anchor.click()
       window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      
-      // Mostrar notificación de éxito (simulado con alert ya que no hay toast importado)
-      alert('Ganancias exportadas correctamente')
+      document.body.removeChild(anchor)
+      toast.success('Historial exportado correctamente')
     } catch (error) {
-      console.error('Error al exportar ganancias:', error)
-      alert('Error al exportar ganancias')
+      console.error('Error al exportar:', error)
+      toast.error('Error al exportar el historial')
     }
   }
 
@@ -142,13 +109,15 @@ const Earnings = () => {
     )
   }
 
+  const filtered = getFilteredAppointments()
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Mis Ganancias</h1>
-          <p className="text-gray-600">Revisa tus ingresos y comisiones</p>
+          <h1 className="text-2xl font-bold text-gray-900">Mis Servicios</h1>
+          <p className="text-gray-600">Historial de servicios completados</p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
           <select
@@ -175,13 +144,11 @@ const Earnings = () => {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-green-100 rounded-lg">
-              <DollarSign className="w-6 h-6 text-green-600" />
+              <CheckCircle className="w-6 h-6 text-green-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Hoy</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(summary.today)}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{summary.today}</p>
             </div>
           </div>
         </div>
@@ -193,9 +160,7 @@ const Earnings = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Esta semana</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(summary.week)}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{summary.week}</p>
             </div>
           </div>
         </div>
@@ -207,9 +172,7 @@ const Earnings = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Este mes</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(summary.month)}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{summary.month}</p>
             </div>
           </div>
         </div>
@@ -217,92 +180,77 @@ const Earnings = () => {
         <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
           <div className="flex items-center">
             <div className="p-2 bg-orange-100 rounded-lg">
-              <DollarSign className="w-6 h-6 text-orange-600" />
+              <CheckCircle className="w-6 h-6 text-orange-600" />
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Total</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {formatCurrency(summary.total)}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{summary.total}</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Earnings List */}
+      {/* History List */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Historial de Ganancias</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Historial de Servicios</h2>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Fecha y Hora
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Servicio
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ubicación
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Monto Total
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Mi Comisión
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {earnings.map((earning) => (
-                <tr key={earning.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <Clock className="w-4 h-4 text-gray-400 mr-2" />
-                      <div>
-                        <div className="text-sm font-medium text-gray-900">
-                          {new Date(earning.date).toLocaleDateString('es-MX')}
-                        </div>
-                        <div className="text-sm text-gray-500">{earning.time}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {earning.service}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <MapPin className="w-4 h-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-900">{earning.location}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {formatCurrency(earning.amount)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-bold text-green-600">
-                      {formatCurrency(earning.commission)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                      Completado
-                    </span>
-                  </td>
+        {filtered.length === 0 ? (
+          <div className="px-6 py-12 text-center text-gray-500">
+            No hay servicios completados en este período
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Fecha
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Cita #
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Dirección
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {filtered.map((appt) => (
+                  <tr key={appt._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Clock className="w-4 h-4 text-gray-400 mr-2" />
+                        <span className="text-sm text-gray-900">
+                          {new Date(appt.scheduledDate || appt.updatedAt).toLocaleDateString('es-MX')}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {appt.appointmentNumber || appt._id?.slice(-6)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <MapPin className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                        <span className="text-sm text-gray-900 truncate max-w-xs">
+                          {appt.pickupAddress || appt.address || '—'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        Completado
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   )
