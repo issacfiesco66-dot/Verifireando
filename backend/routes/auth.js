@@ -61,13 +61,19 @@ const generateToken = (user, role) => {
   );
 };
 
+const isLocalhost = (req) => {
+  const ip = req.ip || req.connection?.remoteAddress || '';
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+};
+
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.AUTH_RATE_LIMIT_MAX_REQUESTS
     ? parseInt(process.env.AUTH_RATE_LIMIT_MAX_REQUESTS, 10)
     : 10,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: isLocalhost
 });
 
 const otpLimiter = rateLimit({
@@ -76,7 +82,8 @@ const otpLimiter = rateLimit({
     ? parseInt(process.env.OTP_RATE_LIMIT_MAX_REQUESTS, 10)
     : 5,
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  skip: isLocalhost
 });
 
 // Función para enviar OTP por WhatsApp y Email

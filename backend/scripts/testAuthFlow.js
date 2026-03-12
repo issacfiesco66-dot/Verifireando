@@ -7,6 +7,7 @@
 require('dotenv').config();
 const axios = require('axios');
 const mongoose = require('mongoose');
+const User = require('../models/User');
 
 const BASE_URL = process.env.TEST_API_URL || 'http://localhost:5000/api';
 const TEST_EMAIL = `test_${Date.now()}@verifireando.com`;
@@ -34,7 +35,6 @@ const connectDB = async () => {
 const getOTPFromDB = async (email) => {
   try {
     if (!mongoose.connection.readyState) return null;
-    const User = mongoose.model('User');
     const user = await User.findOne({ email }).select('+verificationCode +verificationCodeExpires');
     return user?.verificationCode || null;
   } catch (e) { return null; }
@@ -220,7 +220,6 @@ const testForgotReset = async () => {
       // Generar token directamente con JWT para pruebas
       try {
         const jwt = require('jsonwebtoken');
-        const User = mongoose.model('User');
         const user = await User.findOne({ email: TEST_EMAIL });
         if (user) {
           resetToken = jwt.sign(
