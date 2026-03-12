@@ -4,7 +4,6 @@
  * Uso: node create-admin.js
  */
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
 const User = require('./models/User');
@@ -20,14 +19,12 @@ async function createAdmin() {
     const password = 'Chicharito26@';
     const name = 'Admin';
 
-    const hashed = await bcrypt.hash(password, 12);
-
     const existing = await User.findOne({ email });
 
     if (existing) {
       existing.role = 'admin';
       existing.isVerified = true;
-      existing.password = hashed;
+      existing.password = password; // pre-save hook hashea automáticamente
       await existing.save();
       console.log(`✅ Usuario admin actualizado: ${email}`);
     } else {
@@ -35,7 +32,7 @@ async function createAdmin() {
         name,
         email,
         phone: '5500000000',
-        password: hashed,
+        password, // pre-save hook hashea automáticamente
         role: 'admin',
         isVerified: true
       });
