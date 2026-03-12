@@ -120,7 +120,7 @@ const AppointmentManagement = () => {
       toast.success(`Cita ${getStatusText(status)} exitosamente`)
     } catch (error) {
       console.error('Error updating appointment status:', error)
-      toast.error('Error al actualizar el estado de la cita')
+      toast.error(error.response?.data?.message || 'Error al actualizar el estado de la cita')
     } finally {
       setProcessingAction(null)
     }

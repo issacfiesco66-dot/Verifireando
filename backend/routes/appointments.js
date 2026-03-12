@@ -734,6 +734,7 @@ router.put('/:id/status', auth, async (req, res) => {
     };
 
     if (!validTransitions[appointment.status].includes(value.status)) {
+      logger.warn(`Status transition blocked: ${appointment.appointmentNumber} ${appointment.status} → ${value.status} by ${req.user?.email}`);
       return res.status(400).json({ 
         message: `No se puede cambiar de ${appointment.status} a ${value.status}` 
       });
