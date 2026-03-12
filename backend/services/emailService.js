@@ -15,7 +15,7 @@ const sendEmail = async ({ to, subject, html }) => {
     logger.info(`Email enviado a ${to}: ${data?.id}`);
     return true;
   } catch (error) {
-    logger.error(`Error enviando email a ${to}:`, error.message);
+    logger.error(`Error enviando email a ${to}: ${error.message || JSON.stringify(error)}`);
     return false;
   }
 };
