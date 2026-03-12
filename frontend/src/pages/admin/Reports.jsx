@@ -68,8 +68,31 @@ const Reports = () => {
   const fetchAnalytics = async () => {
     try {
       setLoading(true)
-      const data = await adminService.getAnalytics(dateRange)
-      setAnalytics(data)
+      const res = await adminService.getAnalytics()
+      const d = res.data
+      setAnalytics(prev => ({
+        ...prev,
+        revenue: {
+          value: d?.revenue?.total || d?.revenue?.month || 0,
+          change: 0,
+          trend: 'up'
+        },
+        appointments: {
+          value: d?.appointments?.total || 0,
+          change: d?.appointments?.today || 0,
+          trend: 'up'
+        },
+        users: {
+          value: d?.users?.total || 0,
+          change: d?.users?.new || 0,
+          trend: 'up'
+        },
+        drivers: {
+          value: d?.drivers?.total || 0,
+          change: d?.drivers?.online || 0,
+          trend: 'up'
+        }
+      }))
     } catch (error) {
       console.error('Error fetching analytics:', error)
       toast.error('Error al cargar los reportes')
@@ -78,22 +101,8 @@ const Reports = () => {
     }
   }
 
-  const exportReport = async () => {
-    try {
-      const blob = await adminService.exportReport(reportType, dateRange)
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `reporte_${reportType}_${dateRange}_${new Date().toISOString().split('T')[0]}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      toast.success('Reporte exportado exitosamente')
-    } catch (error) {
-      console.error('Error exporting report:', error)
-      toast.error('Error al exportar el reporte')
-    }
+  const exportReport = () => {
+    toast.success('Exportación de reportes disponible próximamente')
   }
 
   const formatCurrency = (amount) => {

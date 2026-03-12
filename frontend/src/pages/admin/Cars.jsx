@@ -50,8 +50,9 @@ const Cars = () => {
   const fetchCars = async () => {
     try {
       setLoading(true)
-      const data = await adminService.getCars()
-      setCars(data)
+      const res = await adminService.getCars({ limit: 200 })
+      const list = res.data
+      setCars(Array.isArray(list?.cars || list) ? (list?.cars || list) : [])
     } catch (error) {
       console.error('Error fetching cars:', error)
       toast.error('Error al cargar los vehículos')
@@ -141,7 +142,7 @@ const Cars = () => {
 
   const handleVerifyCar = async (carId, approved) => {
     try {
-      await adminService.verifyCar(carId, approved)
+      await adminService.verifyCar(carId, { status: approved ? 'approved' : 'rejected' })
       setCars(cars.map(c => 
         c._id === carId ? { ...c, isVerified: approved } : c
       ))
@@ -152,9 +153,20 @@ const Cars = () => {
     }
   }
 
-  const exportCars = async () => {
+  const exportCars = () => {
     try {
-      const blob = await adminService.exportCars()
+      const rows = [
+        ['ID', 'Marca', 'Modelo', 'Año', 'Placas', 'Propietario', 'Estado', 'Verificado'],
+        ...filteredCars.map(c => [
+          c._id, c.make || '', c.model || '', c.year || '',
+          c.licensePlate || '',
+          c.owner?.name || c.driver?.name || '',
+          c.isActive ? 'Activo' : 'Inactivo',
+          c.isVerified ? 'Sí' : 'No'
+        ])
+      ]
+      const csv = rows.map(r => r.join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

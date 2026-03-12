@@ -48,8 +48,8 @@ const Users = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true)
-      const data = await adminService.getUsers()
-      setUsers(data)
+      const res = await adminService.getUsers({ limit: 200 })
+      setUsers(Array.isArray(res.data?.users) ? res.data.users : [])
     } catch (error) {
       console.error('Error fetching users:', error)
       toast.error('Error al cargar los usuarios')
@@ -125,9 +125,19 @@ const Users = () => {
     }
   }
 
-  const exportUsers = async () => {
+  const exportUsers = () => {
     try {
-      const blob = await adminService.exportUsers()
+      const rows = [
+        ['ID', 'Nombre', 'Email', 'Teléfono', 'Rol', 'Estado', 'Verificado', 'Fecha'],
+        ...filteredUsers.map(u => [
+          u._id, u.name, u.email, u.phone || '',
+          u.role, u.isActive ? 'Activo' : 'Inactivo',
+          u.isVerified ? 'Sí' : 'No',
+          new Date(u.createdAt).toLocaleDateString('es-MX')
+        ])
+      ]
+      const csv = rows.map(r => r.join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

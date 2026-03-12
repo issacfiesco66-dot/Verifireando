@@ -257,32 +257,38 @@ export const serviceService = {
 // Admin service for admin-specific operations
 export const adminService = {
   // Users management
-  getUsers: (params) => userAPI.get('/admin/users', { params }),
-  getUserById: (id) => userAPI.get(`/admin/users/${id}`),
-  updateUser: (id, data) => userAPI.put(`/admin/users/${id}`, data),
-  deleteUser: (id) => userAPI.delete(`/admin/users/${id}`),
-  createUser: (data) => userAPI.post('/admin/users', data),
-  
+  getUsers: (params) => userAPI.get('/', { params }),
+  getUserById: (id) => userAPI.get(`/${id}`),
+  updateUser: (id, data) => userAPI.put(`/${id}`, data),
+  deleteUser: (id) => userAPI.delete(`/${id}`),
+  toggleUserStatus: (id, isActive) => userAPI.patch(`/${id}/status`, { isActive }),
+
   // Drivers management
-  getDrivers: (params) => driverAPI.get('/admin/drivers', { params }),
-  getDriverById: (id) => driverAPI.get(`/admin/drivers/${id}`),
-  updateDriver: (id, data) => driverAPI.put(`/admin/drivers/${id}`, data),
-  deleteDriver: (id) => driverAPI.delete(`/admin/drivers/${id}`),
-  approveDriver: (id) => driverAPI.put(`/admin/drivers/${id}/approve`),
-  rejectDriver: (id) => driverAPI.put(`/admin/drivers/${id}/reject`),
-  
+  getDrivers: (params) => driverAPI.get('/', { params }),
+  getDriverById: (id) => driverAPI.get(`/${id}`),
+  updateDriver: (id, data) => driverAPI.put(`/${id}`, data),
+  deleteDriver: (id) => userAPI.delete(`/${id}`),
+  verifyDriver: (id, status, notes) => driverAPI.put(`/${id}/verification`, { status, notes }),
+  approveDriver: (id) => driverAPI.put(`/${id}/verification`, { status: 'approved' }),
+  rejectDriver: (id) => driverAPI.put(`/${id}/verification`, { status: 'rejected' }),
+  toggleDriverStatus: (id, isActive) => userAPI.patch(`/${id}/status`, { isActive }),
+
   // Cars management
-  getCars: (params) => carAPI.get('/admin/cars', { params }),
-  getCarById: (id) => carAPI.get(`/admin/cars/${id}`),
-  updateCar: (id, data) => carAPI.put(`/admin/cars/${id}`, data),
-  deleteCar: (id) => carAPI.delete(`/admin/cars/${id}`),
-  
+  getCars: (params) => carAPI.get('/', { params }),
+  getCarById: (id) => carAPI.get(`/${id}`),
+  updateCar: (id, data) => carAPI.put(`/${id}`, data),
+  deleteCar: (id) => carAPI.delete(`/${id}`),
+  toggleCarStatus: (id, isActive) => carAPI.put(`/${id}/status`, { isActive }),
+  verifyCar: (id, data) => carAPI.post(`/${id}/verification`, data),
+
   // Appointments management
-  getAppointments: (params) => appointmentAPI.get('/admin/appointments', { params }),
-  getAppointmentById: (id) => appointmentAPI.get(`/admin/appointments/${id}`),
-  updateAppointment: (id, data) => appointmentAPI.put(`/admin/appointments/${id}`, data),
-  deleteAppointment: (id) => appointmentAPI.delete(`/admin/appointments/${id}`),
-  
+  getAppointments: (params) => appointmentAPI.get('/', { params }),
+  getAppointmentById: (id) => appointmentAPI.get(`/${id}`),
+  updateAppointment: (id, data) => appointmentAPI.put(`/${id}`, data),
+  updateAppointmentStatus: (id, status) => appointmentAPI.put(`/${id}/status`, { status }),
+  assignDriver: (id, driverId) => appointmentAPI.put(`/${id}/assign-driver`, { driverId }),
+  getAvailableDrivers: () => driverAPI.get('/', { params: { isAvailable: true } }),
+
   // Payments management
   getPayments: (params) => paymentAPI.get('/', { params }),
   getPaymentById: (id) => paymentAPI.get(`/${id}`),
@@ -290,14 +296,15 @@ export const adminService = {
   getPaymentAnalytics: (params) => paymentAPI.get('/admin/stats', { params }),
   processRefund: (id, data) => paymentAPI.post(`/${id}/refund`, data),
   exportPayments: (params) => paymentAPI.get('/', { params }),
-  
+
   // Reports and analytics
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
   getRecentActivity: () => api.get('/admin/recent-activity'),
   getTopDrivers: () => api.get('/admin/top-drivers'),
+  getAnalytics: (params) => api.get('/admin/dashboard/stats', { params }),
   getReports: (params) => api.get('/admin/reports', { params }),
-  exportReport: (type, params) => api.get(`/admin/reports/export/${type}`, { params }),
-  
+  exportReport: (type, params) => api.get('/admin/reports', { params }),
+
   // Settings
   getSettings: () => api.get('/admin/settings'),
   updateSettings: (data) => api.put('/admin/settings', data),

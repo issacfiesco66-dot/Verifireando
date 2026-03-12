@@ -52,8 +52,9 @@ const Drivers = () => {
   const fetchDrivers = async () => {
     try {
       setLoading(true)
-      const data = await adminService.getDrivers()
-      setDrivers(data)
+      const res = await adminService.getDrivers({ limit: 200 })
+      const list = res.data
+      setDrivers(Array.isArray(list?.drivers || list) ? (list?.drivers || list) : [])
     } catch (error) {
       console.error('Error fetching drivers:', error)
       toast.error('Error al cargar los choferes')
@@ -80,8 +81,8 @@ const Drivers = () => {
       filtered = filtered.filter(driver => {
         if (statusFilter === 'active') return driver.isActive
         if (statusFilter === 'inactive') return !driver.isActive
-        if (statusFilter === 'online') return onlineDrivers?.some(d => d.id === driver._id)
-        if (statusFilter === 'offline') return !onlineDrivers?.some(d => d.id === driver._id)
+        if (statusFilter === 'online') return driver.isOnline
+        if (statusFilter === 'offline') return !driver.isOnline
         return true
       })
     }
@@ -111,7 +112,7 @@ const Drivers = () => {
 
   const confirmVerifyDriver = async (approved) => {
     try {
-      await adminService.verifyDriver(driverToVerify._id, approved)
+      await adminService.verifyDriver(driverToVerify._id, approved ? 'approved' : 'rejected')
       setDrivers(drivers.map(d => 
         d._id === driverToVerify._id ? { ...d, isVerified: approved } : d
       ))
@@ -137,9 +138,20 @@ const Drivers = () => {
     }
   }
 
-  const exportDrivers = async () => {
+  const exportDrivers = () => {
     try {
-      const blob = await adminService.exportDrivers()
+      const rows = [
+        ['ID', 'Nombre', 'Email', 'Teléfono', 'Licencia', 'Estado', 'Verificado', 'En línea'],
+        ...filteredDrivers.map(d => [
+          d._id, d.name, d.email, d.phone || '',
+          d.driverProfile?.licenseNumber || '',
+          d.isActive ? 'Activo' : 'Inactivo',
+          d.isVerified ? 'Sí' : 'No',
+          d.isOnline ? 'Sí' : 'No'
+        ])
+      ]
+      const csv = rows.map(r => r.join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -166,7 +178,7 @@ const Drivers = () => {
   }
 
   const isDriverOnline = (driverId) => {
-    return onlineDrivers?.some(d => d.id === driverId)
+    return drivers.find(d => d._id === driverId)?.isOnline
   }
 
   const formatDate = (date) => {

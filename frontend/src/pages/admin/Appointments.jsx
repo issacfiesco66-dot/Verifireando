@@ -70,8 +70,8 @@ const Appointments = () => {
   const fetchAppointments = async () => {
     try {
       setLoading(true)
-      const data = await adminService.getAppointments()
-      setAppointments(data)
+      const res = await adminService.getAppointments({ limit: 200 })
+      setAppointments(Array.isArray(res.data?.appointments) ? res.data.appointments : [])
     } catch (error) {
       console.error('Error fetching appointments:', error)
       toast.error('Error al cargar las citas')
@@ -82,8 +82,9 @@ const Appointments = () => {
 
   const fetchAvailableDrivers = async () => {
     try {
-      const data = await adminService.getAvailableDrivers()
-      setAvailableDrivers(data)
+      const res = await adminService.getAvailableDrivers()
+      const list = res.data
+      setAvailableDrivers(Array.isArray(list?.drivers || list) ? (list?.drivers || list) : [])
     } catch (error) {
       console.error('Error fetching available drivers:', error)
     }
@@ -199,9 +200,22 @@ const Appointments = () => {
     }
   }
 
-  const exportAppointments = async () => {
+  const exportAppointments = () => {
     try {
-      const blob = await adminService.exportAppointments()
+      const rows = [
+        ['ID', 'Fecha', 'Cliente', 'Chofer', 'Estado', 'Servicio', 'Dirección'],
+        ...filteredAppointments.map(a => [
+          a._id,
+          new Date(a.scheduledDate).toLocaleDateString('es-MX'),
+          a.client?.name || '',
+          a.driver?.name || 'Sin asignar',
+          a.status,
+          a.serviceType || '',
+          a.pickupAddress?.street || a.location?.address || ''
+        ])
+      ]
+      const csv = rows.map(r => r.join(',')).join('\n')
+      const blob = new Blob([csv], { type: 'text/csv' })
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
