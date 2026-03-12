@@ -102,7 +102,9 @@ const User = require('./models/User');
 
 io.use(async (socket, next) => {
   const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  logger.info(`[SOCKET] Handshake from ${socket.handshake.address}, hasToken=${!!token}`);
   if (!token) {
+    logger.warn('[SOCKET] Rejected: no token');
     return next(new Error('Autenticación requerida'));
   }
   // Try JWT first
