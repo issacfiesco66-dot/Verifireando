@@ -80,7 +80,7 @@ const Earnings = () => {
         ...filtered.map(a => [
           new Date(a.scheduledDate || a.createdAt).toLocaleDateString('es-MX'),
           a.appointmentNumber || a._id,
-          `"${a.address || a.pickupAddress || ''}"`,
+          `"${a.pickupAddress?.street || a.address || ''}"`,
           a.status
         ].join(','))
       ].join('\n')
@@ -236,7 +236,7 @@ const Earnings = () => {
                       <div className="flex items-center">
                         <MapPin className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
                         <span className="text-sm text-gray-900 truncate max-w-xs">
-                          {appt.pickupAddress || appt.address || '—'}
+                          {appt.pickupAddress?.street || appt.address || '—'}
                         </span>
                       </div>
                     </td>

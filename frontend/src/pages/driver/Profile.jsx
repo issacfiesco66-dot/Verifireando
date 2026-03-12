@@ -114,7 +114,7 @@ const Profile = () => {
             name: profileData.name || user.name || '',
             email: profileData.email || user.email || '',
             phone: profileData.phone || user.phone || '',
-            address: profileData.address || user.address || '',
+            address: profileData.address?.street || (typeof profileData.address === 'string' ? profileData.address : '') || user.address?.street || (typeof user.address === 'string' ? user.address : '') || '',
             emergencyContact: profileData.emergencyContact || user.emergencyContact || '',
             emergencyPhone: profileData.emergencyPhone || user.emergencyPhone || ''
           })
@@ -127,7 +127,7 @@ const Profile = () => {
             name: user.name || '',
             email: user.email || '',
             phone: user.phone || '',
-            address: user.address || '',
+            address: user.address?.street || (typeof user.address === 'string' ? user.address : '') || '',
             emergencyContact: user.emergencyContact || '',
             emergencyPhone: user.emergencyPhone || ''
           })
