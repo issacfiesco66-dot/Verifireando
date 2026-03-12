@@ -588,40 +588,6 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// Obtener pago por ID
-router.get('/:id', auth, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const payment = await Payment.findById(id)
-      .populate('client', 'name email phone')
-      .populate({
-        path: 'appointment',
-        populate: [
-          { path: 'car', select: 'plates brand model color' },
-          { path: 'driver', select: 'name phone' }
-        ]
-      });
-    
-    if (!payment) {
-      return res.status(404).json({ message: 'Pago no encontrado' });
-    }
-
-    // Verificar permisos
-    if (req.userRole !== 'admin' && payment.client._id.toString() !== req.userId) {
-      return res.status(403).json({ 
-        message: 'No tienes permisos para ver este pago' 
-      });
-    }
-
-    res.json({ payment });
-
-  } catch (error) {
-    logger.error('Error obteniendo pago:', error);
-    res.status(500).json({ message: 'Error interno del servidor' });
-  }
-});
-
 // Procesar reembolso
 router.post('/:id/refund', auth, authorize('admin'), async (req, res) => {
   try {
@@ -659,7 +625,6 @@ router.post('/:id/refund', auth, authorize('admin'), async (req, res) => {
 
     let stripeRefund = null;
 
-    // Procesar reembolso en Stripe si es pago con tarjeta
     if (payment.provider === 'stripe' && payment.stripeChargeId) {
       if (!stripe) {
         return res.status(503).json({ message: 'Stripe no está configurado' });
@@ -667,23 +632,20 @@ router.post('/:id/refund', auth, authorize('admin'), async (req, res) => {
       try {
         stripeRefund = await stripe.refunds.create({
           charge: payment.stripeChargeId,
-          amount: refundAmount * 100, // Stripe usa centavos
+          amount: refundAmount * 100,
           reason: value.reason,
           metadata: {
             paymentId: payment._id.toString(),
             appointmentNumber: payment.appointment.appointmentNumber,
-            processedBy: req.user.email
+            processedBy: req.userId
           }
         });
       } catch (stripeError) {
         logger.error('Error procesando reembolso en Stripe:', stripeError);
-        return res.status(500).json({ 
-          message: 'Error procesando el reembolso' 
-        });
+        return res.status(500).json({ message: 'Error procesando el reembolso' });
       }
     }
 
-    // Procesar reembolso en la base de datos
     const refund = await payment.processRefund(
       refundAmount,
       value.reason,
@@ -692,7 +654,6 @@ router.post('/:id/refund', auth, authorize('admin'), async (req, res) => {
       stripeRefund?.id
     );
 
-    // Enviar notificación al cliente
     await Notification.create({
       recipient: payment.client._id,
       recipientModel: 'User',
@@ -709,7 +670,7 @@ router.post('/:id/refund', auth, authorize('admin'), async (req, res) => {
       }
     });
 
-    logger.info(`Reembolso procesado: $${refundAmount} para pago ${payment.paymentNumber} por ${req.user.email}`);
+    logger.info(`Reembolso procesado: $${refundAmount} para pago ${payment.paymentNumber}`);
 
     res.json({
       message: 'Reembolso procesado exitosamente',
@@ -929,6 +890,40 @@ router.put('/methods/:id/default', auth, async (req, res) => {
     res.json({ message: 'Método de pago establecido como por defecto' });
   } catch (error) {
     logger.error('Error estableciendo método de pago por defecto:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Obtener pago por ID (debe ir AL FINAL para no capturar rutas con nombre)
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const payment = await Payment.findById(id)
+      .populate('client', 'name email phone')
+      .populate({
+        path: 'appointment',
+        populate: [
+          { path: 'car', select: 'plates brand model color' },
+          { path: 'driver', select: 'name phone' }
+        ]
+      });
+    
+    if (!payment) {
+      return res.status(404).json({ message: 'Pago no encontrado' });
+    }
+
+    // Verificar permisos
+    if (req.userRole !== 'admin' && payment.client._id.toString() !== req.userId) {
+      return res.status(403).json({ 
+        message: 'No tienes permisos para ver este pago' 
+      });
+    }
+
+    res.json({ payment });
+
+  } catch (error) {
+    logger.error('Error obteniendo pago:', error);
     res.status(500).json({ message: 'Error interno del servidor' });
   }
 });
