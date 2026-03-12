@@ -16,6 +16,7 @@ const paymentRoutes = require('./routes/payments');
 const publicPaymentRoutes = require('./routes/public-payments');
 const notificationRoutes = require('./routes/notifications');
 const serviceRoutes = require('./routes/services');
+const adminRoutes = require('./routes/admin');
 
 const logger = require('./utils/logger');
 const { initializeFirebase } = require('./config/firebase');
@@ -201,6 +202,7 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/public-payments', publicPaymentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Ruta de salud
 app.get('/api/health', (req, res) => {

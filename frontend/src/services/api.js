@@ -290,6 +290,8 @@ export const adminService = {
   
   // Reports and analytics
   getDashboardStats: () => api.get('/admin/dashboard/stats'),
+  getRecentActivity: () => api.get('/admin/recent-activity'),
+  getTopDrivers: () => api.get('/admin/top-drivers'),
   getReports: (params) => api.get('/admin/reports', { params }),
   exportReport: (type, params) => api.get(`/admin/reports/export/${type}`, { params }),
   

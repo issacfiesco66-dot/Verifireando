@@ -1,8 +1,9 @@
 const express = require('express');
 const { auth, authorize } = require('../middleware/auth');
 const User = require('../models/User');
-const Driver = require('../models/Driver');
 const Appointment = require('../models/Appointment');
+const Payment = require('../models/Payment');
+const Car = require('../models/Car');
 const logger = require('../utils/logger');
 
 const router = express.Router();
@@ -10,22 +11,94 @@ const router = express.Router();
 // Get dashboard stats
 router.get('/dashboard/stats', auth, authorize('admin'), async (req, res) => {
   try {
-    const stats = await Promise.all([
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [totalUsers, activeUsers, newUsersToday,
+           totalDrivers, onlineDrivers,
+           totalAppointments, todayAppointments, pendingAppointments, completedAppointments,
+           totalRevenue, todayRevenue, monthRevenue,
+           totalCars] = await Promise.all([
       User.countDocuments({ role: 'client' }),
-      Driver.countDocuments(),
+      User.countDocuments({ role: 'client', isActive: true }),
+      User.countDocuments({ role: 'client', createdAt: { $gte: startOfToday } }),
+      User.countDocuments({ role: 'driver' }),
+      User.countDocuments({ role: 'driver', isOnline: true }),
       Appointment.countDocuments(),
-      Appointment.countDocuments({ status: 'pending' })
+      Appointment.countDocuments({ scheduledDate: { $gte: startOfToday } }),
+      Appointment.countDocuments({ status: 'pending' }),
+      Appointment.countDocuments({ status: { $in: ['completed', 'delivered'] } }),
+      Payment.aggregate([{ $match: { status: 'completed' } }, { $group: { _id: null, total: { $sum: '$amount.total' } } }]),
+      Payment.aggregate([{ $match: { status: 'completed', createdAt: { $gte: startOfToday } } }, { $group: { _id: null, total: { $sum: '$amount.total' } } }]),
+      Payment.aggregate([{ $match: { status: 'completed', createdAt: { $gte: startOfMonth } } }, { $group: { _id: null, total: { $sum: '$amount.total' } } }]),
+      Car.countDocuments()
     ]);
 
     res.json({
-      clients: stats[0],
-      drivers: stats[1],
-      appointments: stats[2],
-      pendingAppointments: stats[3]
+      users: { total: totalUsers, active: activeUsers, new: newUsersToday },
+      drivers: { total: totalDrivers, active: totalDrivers, online: onlineDrivers },
+      appointments: { total: totalAppointments, today: todayAppointments, pending: pendingAppointments, completed: completedAppointments },
+      revenue: {
+        total: totalRevenue[0]?.total || 0,
+        today: todayRevenue[0]?.total || 0,
+        month: monthRevenue[0]?.total || 0
+      },
+      cars: { total: totalCars, verified: totalCars, pending: 0 }
     });
   } catch (error) {
     logger.error('Error getting dashboard stats:', error);
     res.status(500).json({ message: 'Error al obtener estadísticas' });
+  }
+});
+
+// Get recent activity
+router.get('/recent-activity', auth, authorize('admin'), async (req, res) => {
+  try {
+    const recentAppointments = await Appointment.find()
+      .populate('client', 'name')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    const activity = recentAppointments.map(appt => ({
+      type: appt.status === 'completed' ? 'payment_completed' : 'appointment_created',
+      data: {
+        clientName: appt.client?.name || 'Cliente',
+        amount: appt.totalAmount || 0,
+        appointmentNumber: appt.appointmentNumber
+      },
+      createdAt: appt.createdAt
+    }));
+
+    res.json(activity);
+  } catch (error) {
+    logger.error('Error getting recent activity:', error);
+    res.status(500).json({ message: 'Error al obtener actividad reciente' });
+  }
+});
+
+// Get top drivers
+router.get('/top-drivers', auth, authorize('admin'), async (req, res) => {
+  try {
+    const drivers = await User.find({ role: 'driver', isActive: true })
+      .select('name driverProfile.rating driverProfile.totalTrips isOnline')
+      .sort({ 'driverProfile.totalTrips': -1 })
+      .limit(5)
+      .lean();
+
+    const result = drivers.map(d => ({
+      _id: d._id,
+      name: d.name,
+      rating: d.driverProfile?.rating || 0,
+      completedAppointments: d.driverProfile?.totalTrips || 0,
+      isOnline: d.isOnline
+    }));
+
+    res.json(result);
+  } catch (error) {
+    logger.error('Error getting top drivers:', error);
+    res.status(500).json({ message: 'Error al obtener conductores' });
   }
 });
 

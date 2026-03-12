@@ -41,15 +41,15 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
-      const [statsData, activityData, driversData] = await Promise.all([
+      const [statsRes, activityRes, driversRes] = await Promise.all([
         adminService.getDashboardStats(),
         adminService.getRecentActivity(),
         adminService.getTopDrivers()
       ])
       
-      setStats(statsData)
-      setRecentActivity(activityData)
-      setTopDrivers(driversData)
+      setStats(statsRes.data)
+      setRecentActivity(Array.isArray(activityRes.data) ? activityRes.data : [])
+      setTopDrivers(Array.isArray(driversRes.data) ? driversRes.data : [])
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
       toast.error('Error al cargar los datos del dashboard')
@@ -159,7 +159,7 @@ const Dashboard = () => {
               <p className="text-2xl font-bold text-gray-900">{stats.drivers.total}</p>
               <p className="text-xs text-green-600 flex items-center mt-1">
                 <div className="w-2 h-2 bg-green-500 rounded-full mr-1"></div>
-                {onlineDrivers?.length || 0} en línea
+                {stats.drivers.online || 0} en línea
               </p>
             </div>
             <div className="p-3 bg-green-100 rounded-lg">
@@ -310,11 +310,7 @@ const Dashboard = () => {
                       </span>
                     </div>
                   </div>
-                  <div className={`w-2 h-2 rounded-full ${
-                    onlineDrivers?.some(d => d.id === driver._id) 
-                      ? 'bg-green-500' 
-                      : 'bg-gray-300'
-                  }`}></div>
+                  <div className={`w-2 h-2 rounded-full ${driver.isOnline ? 'bg-green-500' : 'bg-gray-300'}`}></div>
                 </div>
               ))
             ) : (
