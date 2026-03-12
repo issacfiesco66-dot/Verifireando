@@ -26,7 +26,11 @@ const log = (status, test, detail = '') => {
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 10000,
-  validateStatus: () => true // No lanzar errores por status HTTP
+  validateStatus: () => true, // No lanzar errores por status HTTP
+  headers: {
+    'Content-Type': 'application/json',
+    'Origin': process.env.FRONTEND_URL || 'https://www.verificandoando.com.mx'
+  }
 });
 
 // ══════════════════════════════════════════════

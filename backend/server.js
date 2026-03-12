@@ -26,7 +26,7 @@ const server = createServer(app);
 const defaultOrigins = ["http://localhost:3000", "http://localhost:5173"];
 const envOriginsRaw = process.env.FRONTEND_URL || process.env.CORS_ORIGIN;
 const allowedOrigins = envOriginsRaw ? envOriginsRaw.split(',').map(s => s.trim()) : defaultOrigins;
-const allowNoOrigin = process.env.ALLOW_NO_ORIGIN === 'true' || process.env.NODE_ENV === 'development';
+const allowNoOrigin = true; // Permitir siempre: CORS es solo para browsers, no server-side
 
 const io = new Server(server, {
   cors: {

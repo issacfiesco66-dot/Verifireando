@@ -6,6 +6,7 @@
  */
 require('dotenv').config();
 const mongoose = require('mongoose');
+process.env.MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI;
 const User = require('../models/User');
 const Appointment = require('../models/Appointment');
 const logger = require('../utils/logger');
@@ -17,7 +18,9 @@ const appointmentsOnly = args.includes('--appointments-only');
 const cleanDatabase = async () => {
   try {
     console.log('🔌 Conectando a MongoDB...');
-    await mongoose.connect(process.env.MONGO_URI);
+    const mongoUri = process.env.MONGODB_URI || process.env.MONGO_URI;
+    if (!mongoUri) throw new Error('MONGODB_URI/MONGO_URI no configurado en .env');
+    await mongoose.connect(mongoUri);
     console.log('✅ Conectado a MongoDB\n');
 
     if (!appointmentsOnly) {
