@@ -133,11 +133,25 @@ const Settings = () => {
   const fetchSettings = async () => {
     try {
       setLoading(true)
-      const data = await adminService.getSettings()
-      setSettings(data)
+      const res = await adminService.getSettings()
+      const d = res.data
+      if (d && typeof d === 'object') {
+        setSettings(prev => ({
+          ...prev,
+          general: {
+            ...prev.general,
+            ...(d.general || {}),
+            siteName: d.siteName ?? d.general?.siteName ?? prev.general.siteName,
+            maintenanceMode: d.maintenance ?? d.general?.maintenanceMode ?? prev.general.maintenanceMode,
+          },
+          notifications: d.notifications ? { ...prev.notifications, ...d.notifications } : prev.notifications,
+          security: d.security ? { ...prev.security, ...d.security } : prev.security,
+          integrations: d.integrations ? { ...prev.integrations, ...d.integrations } : prev.integrations,
+          business: d.business ? { ...prev.business, ...d.business } : prev.business,
+        }))
+      }
     } catch (error) {
       console.error('Error fetching settings:', error)
-      toast.error('Error al cargar la configuración')
     } finally {
       setLoading(false)
     }
