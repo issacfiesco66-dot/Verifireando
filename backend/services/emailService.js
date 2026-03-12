@@ -1,259 +1,127 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const logger = require('../utils/logger');
 
-// Verificar si SMTP está configurado
-const isSmtpConfigured = () => {
-  return !!(process.env.SMTP_USER && process.env.SMTP_PASS);
+const FROM_EMAIL = process.env.FROM_EMAIL || 'Verifireando <noreply@verificandoando.com.mx>';
+const FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.verificandoando.com.mx';
+
+const isEmailConfigured = () => !!(process.env.RESEND_API_KEY);
+
+const sendEmail = async ({ to, subject, html }) => {
+  if (!isEmailConfigured()) return false;
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const { data, error } = await resend.emails.send({ from: FROM_EMAIL, to, subject, html });
+    if (error) throw new Error(JSON.stringify(error));
+    logger.info(`Email enviado a ${to}: ${data?.id}`);
+    return true;
+  } catch (error) {
+    logger.error(`Error enviando email a ${to}:`, error.message);
+    return false;
+  }
 };
 
-// Configuración del transporter
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
+const sendPasswordResetEmail = async (email, name, resetToken) => {
+  if (!isEmailConfigured()) {
+    logger.warn(`Email no configurado. Token de recuperación para ${email}: ${resetToken}`);
+    return false;
+  }
+  const resetUrl = `${FRONTEND_URL}/auth/reset-password?token=${resetToken}`;
+  return sendEmail({
+    to: email,
+    subject: 'Recuperación de Contraseña - Verifireando',
+    html: `
+      <!DOCTYPE html><html><head><meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2563eb; color: white; text-align: center; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
+        .button { display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+        .code { background: #f3f4f6; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 13px; word-break: break-all; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+      </style></head><body>
+      <div class="header"><h1>Verifireando</h1><p>Recuperación de Contraseña</p></div>
+      <div class="content">
+        <h2>Hola${name ? ', ' + name : ''},</h2>
+        <p>Recibimos una solicitud para recuperar la contraseña de tu cuenta.</p>
+        <a href="${resetUrl}" class="button">Restablecer Contraseña</a>
+        <p>O copia este enlace en tu navegador:</p>
+        <div class="code">${resetUrl}</div>
+        <ul>
+          <li>Este enlace expira en <strong>1 hora</strong></li>
+          <li>Si no solicitaste esto, ignora este email</li>
+        </ul>
+        <p>Soporte: soporte@verificandoando.com.mx</p>
+      </div>
+      <div class="footer"><p>© 2026 Verifireando. Todos los derechos reservados.</p></div>
+      </div></body></html>
+    `
   });
 };
 
-// Función para enviar email de recuperación de contraseña
-const sendPasswordResetEmail = async (email, name, resetToken) => {
-  if (!isSmtpConfigured()) {
-    logger.warn(`SMTP no configurado. Email de recuperación NO enviado a ${email}. Token: ${resetToken}`);
-    return false;
-  }
-  try {
-    const transporter = createTransporter();
-    
-    const resetUrl = `${process.env.FRONTEND_URL || 'https://www.verificandoando.com.mx'}/auth/reset-password?token=${resetToken}`;
-    
-    const mailOptions = {
-      from: `"Verifireando" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: 'Recuperación de Contraseña - Verifireando',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Recuperación de Contraseña</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #2563eb; color: white; text-align: center; padding: 20px; border-radius: 8px 8px 0 0; }
-            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
-            .button { display: inline-block; background: #2563eb; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
-            .code { background: #f3f4f6; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 14px; margin: 20px 0; word-break: break-all; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>🔐 Verifireando</h1>
-            <p>Recuperación de Contraseña</p>
-          </div>
-          
-          <div class="content">
-            <h2>Hola${name ? ', ' + name : ''},</h2>
-            <p>Recibimos una solicitud para recuperar la contraseña de tu cuenta.</p>
-            
-            <p>Para continuar con el proceso de recuperación, haz clic en el siguiente botón:</p>
-            
-            <a href="${resetUrl}" class="button">Restablecer Contraseña</a>
-            
-            <p>O copia y pega este enlace en tu navegador:</p>
-            <div class="code">${resetUrl}</div>
-            
-            <p><strong>Importante:</strong></p>
-            <ul>
-              <li>Este enlace expirará en 1 hora por seguridad</li>
-              <li>Si no solicitaste esta recuperación, ignora este email</li>
-              <li>Nunca compartas este enlace con otras personas</li>
-            </ul>
-            
-            <p>Si tienes problemas, contacta a nuestro soporte:</p>
-            <p>📧 soporte@verificandoando.com.mx</p>
-          </div>
-          
-          <div class="footer">
-            <p>© 2026 Verifireando. Todos los derechos reservados.</p>
-            <p>Este es un email automático, por favor no responder.</p>
-          </div>
-        </body>
-        </html>
-      `
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logger.info(`Email de recuperación enviado a ${email}: ${info.messageId}`);
-    return true;
-    
-  } catch (error) {
-    logger.error('Error enviando email de recuperación:', error);
-    return false;
-  }
-};
-
-// Función para enviar email de confirmación de reset
 const sendPasswordResetConfirmation = async (email, name) => {
-  if (!isSmtpConfigured()) {
-    logger.warn(`SMTP no configurado. Email de confirmación NO enviado a ${email}`);
+  if (!isEmailConfigured()) {
+    logger.warn(`Email no configurado. Confirmación de reset NO enviada a ${email}`);
     return false;
   }
-  try {
-    const transporter = createTransporter();
-    
-    const mailOptions = {
-      from: `"Verifireando" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: 'Contraseña Actualizada Exitosamente - Verifireando',
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Contraseña Actualizada</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #2563eb; color: white; text-align: center; padding: 20px; border-radius: 8px 8px 0 0; }
-            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
-            .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
-            .success { background: #10b981; color: white; padding: 15px; border-radius: 6px; text-align: center; margin: 20px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>🔐 Verifireando</h1>
-            <p>Contraseña Actualizada</p>
-          </div>
-          
-          <div class="content">
-            <h2>Hola${name ? ', ' + name : ''},</h2>
-            <div class="success">
-              ✅ ¡Tu contraseña ha sido actualizada exitosamente!
-            </div>
-            
-            <h2>¿Qué sigue?</h2>
-            <p>Ya puedes iniciar sesión con tu nueva contraseña:</p>
-            <p><a href="${process.env.FRONTEND_URL || 'https://www.verificandoando.com.mx'}/auth/login" style="color: #2563eb;">Iniciar Sesión</a></p>
-            
-            <p><strong>Detalles de la actualización:</strong></p>
-            <ul>
-              <li>Fecha: ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}</li>
-              <li>IP: ${process.env.NODE_ENV === 'development' ? '127.0.0.1' : 'Registrada'}</li>
-            </ul>
-            
-            <p><strong>🔒 Seguridad:</strong></p>
-            <p>Si no realizaste este cambio, contacta inmediatamente a soporte@verificandoando.com.mx</p>
-          </div>
-          
-          <div class="footer">
-            <p>© 2026 Verifireando. Todos los derechos reservados.</p>
-            <p>Este es un email automático, por favor no responder.</p>
-          </div>
-        </body>
-        </html>
-      `
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logger.info(`Email de confirmación enviado a ${email}: ${info.messageId}`);
-    return true;
-    
-  } catch (error) {
-    logger.error('Error enviando email de confirmación:', error);
-    return false;
-  }
+  return sendEmail({
+    to: email,
+    subject: 'Contraseña Actualizada - Verifireando',
+    html: `
+      <!DOCTYPE html><html><head><meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2563eb; color: white; text-align: center; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
+        .success { background: #10b981; color: white; padding: 15px; border-radius: 6px; text-align: center; margin: 20px 0; }
+        .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+      </style></head><body>
+      <div class="header"><h1>Verifireando</h1><p>Contraseña Actualizada</p></div>
+      <div class="content">
+        <h2>Hola${name ? ', ' + name : ''},</h2>
+        <div class="success">Tu contraseña ha sido actualizada exitosamente.</div>
+        <p>Ya puedes <a href="${FRONTEND_URL}/auth/login" style="color:#2563eb">iniciar sesión</a> con tu nueva contraseña.</p>
+        <p>Si no realizaste este cambio, contacta a soporte@verificandoando.com.mx inmediatamente.</p>
+      </div>
+      <div class="footer"><p>© 2026 Verifireando. Todos los derechos reservados.</p></div>
+      </body></html>
+    `
+  });
 };
 
-// Función para enviar código de verificación por email
 const sendVerificationEmailOTP = async (email, name, code, role = 'client') => {
-  if (!isSmtpConfigured()) {
-    logger.warn(`SMTP no configurado. OTP email NO enviado a ${email}. Código: ${code}`);
+  if (!isEmailConfigured()) {
+    logger.warn(`Email no configurado. OTP NO enviado a ${email}. Código: ${code}`);
     return false;
   }
-  try {
-    const transporter = createTransporter();
-    
-    const roleText = role === 'driver' ? 'chofer' : 'cliente';
-    
-    const mailOptions = {
-      from: `"Verifireando" <${process.env.SMTP_USER}>`,
-      to: email,
-      subject: `Código de Verificación - Verifireando`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>Código de Verificación</title>
-          <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: #2563eb; color: white; text-align: center; padding: 20px; border-radius: 8px 8px 0 0; }
-            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
-            .code { background: #2563eb; color: white; font-size: 32px; font-weight: bold; padding: 20px; border-radius: 8px; text-align: center; letter-spacing: 4px; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
-            .info { background: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0; }
-            .warning { background: #fef3c7; border: 1px solid #fbbf24; padding: 15px; border-radius: 6px; margin: 20px 0; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <h1>🔐 Verifireando</h1>
-            <p>Verificación de Cuenta</p>
-          </div>
-          
-          <div class="content">
-            <h2>Hola ${name},</h2>
-            <p>Gracias por registrarte como ${roleText} en Verifireando.</p>
-            
-            <p>Para completar tu verificación, usa el siguiente código:</p>
-            
-            <div class="code">${code}</div>
-            
-            <div class="info">
-              <p><strong>⏱️ Válido por:</strong> 15 minutos</p>
-              <p><strong>📱 Enviado por:</strong> Email y WhatsApp</p>
-            </div>
-            
-            <div class="warning">
-              <p><strong>🔒 Seguridad:</strong></p>
-              <ul>
-                <li>Nunca compartas este código con otras personas</li>
-                <li>Nuestro equipo nunca te pedirá este código por llamada telefónica</li>
-                <li>Si no solicitaste este código, ignora este mensaje</li>
-              </ul>
-            </div>
-            
-            <p>¿Tienes problemas? Contacta a nuestro soporte:</p>
-            <p>📧 soporte@verificandoando.com.mx</p>
-          </div>
-          
-          <div class="footer">
-            <p>© 2026 Verifireando. Todos los derechos reservados.</p>
-            <p>Este es un email automático, por favor no responder.</p>
-          </div>
-        </body>
-        </html>
-      `
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    logger.info(`Verification email sent to ${email}: ${info.messageId}`);
-    return true;
-    
-  } catch (error) {
-    logger.error('Error enviando email de verificación:', error);
-    return false;
-  }
+  const roleText = role === 'driver' ? 'chofer' : 'cliente';
+  return sendEmail({
+    to: email,
+    subject: 'Código de Verificación - Verifireando',
+    html: `
+      <!DOCTYPE html><html><head><meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: #2563eb; color: white; text-align: center; padding: 20px; border-radius: 8px 8px 0 0; }
+        .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
+        .otp { background: #2563eb; color: white; font-size: 36px; font-weight: bold; padding: 20px; border-radius: 8px; text-align: center; letter-spacing: 8px; margin: 20px 0; }
+        .info { background: #f3f4f6; padding: 12px; border-radius: 6px; margin: 15px 0; }
+        .footer { text-align: center; margin-top: 20px; font-size: 12px; color: #666; }
+      </style></head><body>
+      <div class="header"><h1>Verifireando</h1><p>Verificación de Cuenta</p></div>
+      <div class="content">
+        <h2>Hola ${name || ''},</h2>
+        <p>Gracias por registrarte como ${roleText}. Tu código de verificación es:</p>
+        <div class="otp">${code}</div>
+        <div class="info">
+          <p><strong>Válido por 15 minutos.</strong></p>
+          <p>Nunca compartas este código con nadie.</p>
+        </div>
+        <p>Soporte: soporte@verificandoando.com.mx</p>
+      </div>
+      <div class="footer"><p>© 2026 Verifireando. Todos los derechos reservados.</p></div>
+      </body></html>
+    `
+  });
 };
 
 module.exports = {
