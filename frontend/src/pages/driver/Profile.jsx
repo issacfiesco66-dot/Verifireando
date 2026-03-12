@@ -18,7 +18,7 @@ import {
   TrendingUp
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { userService, driverService } from '../../services/api'
+import { userService, driverService, authService } from '../../services/api'
 import { useForm } from 'react-hook-form'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import toast from 'react-hot-toast'
