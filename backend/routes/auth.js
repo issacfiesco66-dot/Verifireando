@@ -7,7 +7,7 @@ const Driver = require('../models/Driver');
 const { auth } = require('../middleware/auth');
 const { verifyFirebaseIdToken } = require('../config/firebase');
 const logger = require('../utils/logger');
-const { sendPasswordResetEmail, sendPasswordResetConfirmation } = require('../services/emailService');
+const { sendPasswordResetEmail, sendPasswordResetConfirmation, sendVerificationEmailOTP } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -79,11 +79,27 @@ const otpLimiter = rateLimit({
   legacyHeaders: false
 });
 
-// Función mock para enviar WhatsApp OTP
-const sendWhatsAppOTP = async (phone, code) => {
-  // En producción, aquí integrarías con la API de WhatsApp Business
-  logger.info(`Mock WhatsApp OTP enviado a ${phone}: ${code}`);
-  return { success: true, messageId: `mock_${Date.now()}` };
+// Función para enviar OTP por WhatsApp y Email
+const sendWhatsAppOTP = async (phone, code, email, name, role = 'client') => {
+  try {
+    // Enviar por WhatsApp (mock en desarrollo)
+    logger.info(`Mock WhatsApp OTP enviado a ${phone}: ${code}`);
+    const whatsappResult = { success: true, messageId: `mock_${Date.now()}` };
+    
+    // Enviar por email
+    const emailResult = await sendVerificationEmailOTP(email, name, code, role);
+    
+    return {
+      whatsapp: whatsappResult,
+      email: emailResult ? { success: true } : { success: false }
+    };
+  } catch (error) {
+    logger.error('Error enviando OTP:', error);
+    return { 
+      whatsapp: { success: false }, 
+      email: { success: false } 
+    };
+  }
 };
 
 // Helper: buscar chofer en User o migrar desde Driver
@@ -225,11 +241,11 @@ router.post('/register', authLimiter, async (req, res) => {
         throw saveError;
       }
 
-      await sendWhatsAppOTP(phone, verificationCode);
+      await sendWhatsAppOTP(phone, verificationCode, email, name, 'driver');
       logger.info(`Chofer registrado: ${email} - Código: ${verificationCode}`);
 
       const responsePayload = {
-        message: 'Chofer registrado exitosamente. Código de verificación enviado por WhatsApp.',
+        message: 'Chofer registrado exitosamente. Código de verificación enviado por WhatsApp y Email.',
         userId: driverUser._id,
         needsVerification: true
       };
@@ -254,11 +270,11 @@ router.post('/register', authLimiter, async (req, res) => {
     const verificationCode = user.generateVerificationCode();
     await user.save();
 
-    await sendWhatsAppOTP(phone, verificationCode);
+    await sendWhatsAppOTP(phone, verificationCode, email, name, 'client');
     logger.info(`Cliente registrado: ${email} - Código: ${verificationCode}`);
 
-    const responsePayload = {
-      message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp.',
+    const responsePayload = { 
+      message: 'Usuario registrado exitosamente. Código de verificación enviado por WhatsApp y Email.',
       userId: user._id,
       needsVerification: true
     };
@@ -318,10 +334,10 @@ router.post('/login', authLimiter, async (req, res) => {
     if (!user.isVerified) {
       const verificationCode = user.generateVerificationCode();
       await user.save();
-      await sendWhatsAppOTP(user.phone, verificationCode);
+      await sendWhatsAppOTP(user.phone, verificationCode, user.email, user.name, 'client');
       logger.info(`Código OTP generado para ${email}: ${verificationCode}`);
       const responsePayload = { 
-        message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
+        message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp y Email.',
         needsVerification: true,
         userId: user._id
       };
@@ -394,10 +410,10 @@ router.post('/login/driver', authLimiter, async (req, res) => {
     if (!driver.isVerified) {
       const verificationCode = driver.generateVerificationCode();
       await driver.save();
-      await sendWhatsAppOTP(driver.phone, verificationCode);
+      await sendWhatsAppOTP(driver.phone, verificationCode, driver.email, driver.name, 'driver');
       logger.info(`Código OTP generado para ${email}: ${verificationCode}`);
       const responsePayload = { 
-        message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp.',
+        message: 'Cuenta no verificada. Código de verificación enviado por WhatsApp y Email.',
         needsVerification: true,
         userId: driver._id
       };
@@ -550,11 +566,11 @@ router.post(['/resend-otp', '/resend-verification'], otpLimiter, async (req, res
     await user.save();
 
     // Enviar OTP
-    await sendWhatsAppOTP(user.phone, verificationCode);
+    await sendWhatsAppOTP(user.phone, verificationCode, user.email, user.name, role);
     
     logger.info(`Código OTP reenviado para ${email} (${role}): ${verificationCode}`);
 
-    const responsePayload = { message: 'Código de verificación reenviado' };
+    const responsePayload = { message: 'Código de verificación reenviado por WhatsApp y Email.' };
     if (process.env.NODE_ENV === 'development') {
       responsePayload.devCode = verificationCode;
     }

@@ -156,7 +156,87 @@ const sendPasswordResetConfirmation = async (email) => {
   }
 };
 
+// Función para enviar código de verificación por email
+const sendVerificationEmailOTP = async (email, name, code, role = 'client') => {
+  try {
+    const transporter = createTransporter();
+    
+    const roleText = role === 'driver' ? 'chofer' : 'cliente';
+    
+    const mailOptions = {
+      from: `"Verifireando" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: `Código de Verificación - Verifireando`,
+      html: `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>Código de Verificación</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: #2563eb; color: white; text-align: center; padding: 20px; border-radius: 8px 8px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb; }
+            .code { background: #2563eb; color: white; font-size: 32px; font-weight: bold; padding: 20px; border-radius: 8px; text-align: center; letter-spacing: 4px; margin: 20px 0; }
+            .footer { text-align: center; margin-top: 30px; font-size: 12px; color: #666; }
+            .info { background: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0; }
+            .warning { background: #fef3c7; border: 1px solid #fbbf24; padding: 15px; border-radius: 6px; margin: 20px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>🔐 Verifireando</h1>
+            <p>Verificación de Cuenta</p>
+          </div>
+          
+          <div class="content">
+            <h2>Hola ${name},</h2>
+            <p>Gracias por registrarte como ${roleText} en Verifireando.</p>
+            
+            <p>Para completar tu verificación, usa el siguiente código:</p>
+            
+            <div class="code">${code}</div>
+            
+            <div class="info">
+              <p><strong>⏱️ Válido por:</strong> 15 minutos</p>
+              <p><strong>📱 Enviado por:</strong> Email y WhatsApp</p>
+            </div>
+            
+            <div class="warning">
+              <p><strong>🔒 Seguridad:</strong></p>
+              <ul>
+                <li>Nunca compartas este código con otras personas</li>
+                <li>Nuestro equipo nunca te pedirá este código por llamada telefónica</li>
+                <li>Si no solicitaste este código, ignora este mensaje</li>
+              </ul>
+            </div>
+            
+            <p>¿Tienes problemas? Contacta a nuestro soporte:</p>
+            <p>📧 soporte@verificandoando.com.mx</p>
+          </div>
+          
+          <div class="footer">
+            <p>© 2026 Verifireando. Todos los derechos reservados.</p>
+            <p>Este es un email automático, por favor no responder.</p>
+          </div>
+        </body>
+        </html>
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logger.info(`Verification email sent to ${email}: ${info.messageId}`);
+    return true;
+    
+  } catch (error) {
+    logger.error('Error enviando email de verificación:', error);
+    return false;
+  }
+};
+
 module.exports = {
   sendPasswordResetEmail,
-  sendPasswordResetConfirmation
+  sendPasswordResetConfirmation,
+  sendVerificationEmailOTP
 };
