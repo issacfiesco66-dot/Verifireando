@@ -17,7 +17,8 @@ import {
   Download,
   Upload,
   Shield,
-  AlertTriangle
+  AlertTriangle,
+  X
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { adminService } from '../../services/api'
@@ -36,6 +37,11 @@ const Users = () => {
   const [showUserModal, setShowUserModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [userToDelete, setUserToDelete] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [formSaving, setFormSaving] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: '', email: '', phone: '', password: '', role: 'client' })
+  const [editForm, setEditForm] = useState({ name: '', email: '', phone: '', role: 'client', isActive: true })
 
   useEffect(() => {
     fetchUsers()
@@ -92,6 +98,57 @@ const Users = () => {
   const handleViewUser = (userData) => {
     setSelectedUser(userData)
     setShowUserModal(true)
+  }
+
+  const openEditModal = (userData) => {
+    setEditForm({
+      name: userData.name || '',
+      email: userData.email || '',
+      phone: userData.phone || '',
+      role: userData.role || 'client',
+      isActive: userData.isActive ?? true,
+    })
+    setSelectedUser(userData)
+    setShowUserModal(false)
+    setShowEditModal(true)
+  }
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault()
+    try {
+      setFormSaving(true)
+      const res = await adminService.createUser(createForm)
+      setUsers(prev => [res.data.user, ...prev])
+      toast.success('Usuario creado exitosamente')
+      setShowCreateModal(false)
+      setCreateForm({ name: '', email: '', phone: '', password: '', role: 'client' })
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al crear el usuario')
+    } finally {
+      setFormSaving(false)
+    }
+  }
+
+  const handleEditUser = async (e) => {
+    e.preventDefault()
+    try {
+      setFormSaving(true)
+      const res = await adminService.updateUser(selectedUser._id, {
+        name: editForm.name,
+        phone: editForm.phone || undefined,
+      })
+      setUsers(prev => prev.map(u => u._id === selectedUser._id ? { ...u, ...res.data.user } : u))
+      if (editForm.isActive !== selectedUser.isActive) {
+        await adminService.toggleUserStatus(selectedUser._id, editForm.isActive)
+        setUsers(prev => prev.map(u => u._id === selectedUser._id ? { ...u, isActive: editForm.isActive } : u))
+      }
+      toast.success('Usuario actualizado exitosamente')
+      setShowEditModal(false)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al actualizar el usuario')
+    } finally {
+      setFormSaving(false)
+    }
   }
 
   const handleDeleteUser = (userData) => {
@@ -215,7 +272,7 @@ const Users = () => {
             <Download className="w-4 h-4" />
             <span>Exportar</span>
           </button>
-          <button className="btn btn-primary btn-md flex items-center space-x-2">
+          <button onClick={() => setShowCreateModal(true)} className="btn btn-primary btn-md flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>Nuevo Usuario</span>
           </button>
@@ -466,6 +523,13 @@ const Users = () => {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      <button
+                        onClick={() => openEditModal(userData)}
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Editar"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -608,10 +672,89 @@ const Users = () => {
               >
                 Cerrar
               </button>
-              <button className="btn btn-primary btn-md">
+              <button onClick={() => openEditModal(selectedUser)} className="btn btn-primary btn-md">
                 Editar Usuario
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Nuevo Usuario</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreateUser} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                <input type="text" required value={createForm.name} onChange={e => setCreateForm(p => ({...p, name: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nombre completo" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input type="email" required value={createForm.email} onChange={e => setCreateForm(p => ({...p, email: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="correo@ejemplo.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                <input type="tel" value={createForm.phone} onChange={e => setCreateForm(p => ({...p, phone: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="10 dígitos" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
+                <input type="password" required minLength={8} value={createForm.password} onChange={e => setCreateForm(p => ({...p, password: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Mínimo 8 caracteres" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rol *</label>
+                <select value={createForm.role} onChange={e => setCreateForm(p => ({...p, role: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="client">Cliente</option>
+                  <option value="driver">Chofer</option>
+                  <option value="admin">Administrador</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={formSaving} className="btn btn-primary btn-md">{formSaving ? 'Creando...' : 'Crear Usuario'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Editar Usuario</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleEditUser} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                <input type="text" required value={editForm.name} onChange={e => setEditForm(p => ({...p, name: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input type="email" disabled value={editForm.email} className="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                <input type="tel" value={editForm.phone} onChange={e => setEditForm(p => ({...p, phone: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estado</label>
+                <select value={editForm.isActive ? 'active' : 'inactive'} onChange={e => setEditForm(p => ({...p, isActive: e.target.value === 'active'}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="active">Activo</option>
+                  <option value="inactive">Inactivo</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={formSaving} className="btn btn-primary btn-md">{formSaving ? 'Guardando...' : 'Guardar Cambios'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -21,7 +21,8 @@ import {
   Navigation,
   Download,
   Shield,
-  Clock
+  Clock,
+  X
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { adminService } from '../../services/api'
@@ -40,6 +41,11 @@ const Drivers = () => {
   const [showDriverModal, setShowDriverModal] = useState(false)
   const [showVerificationModal, setShowVerificationModal] = useState(false)
   const [driverToVerify, setDriverToVerify] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [driverToDelete, setDriverToDelete] = useState(null)
+  const [formSaving, setFormSaving] = useState(false)
+  const [createForm, setCreateForm] = useState({ name: '', email: '', phone: '', password: '' })
 
   useEffect(() => {
     fetchDrivers()
@@ -103,6 +109,39 @@ const Drivers = () => {
   const handleViewDriver = (driverData) => {
     setSelectedDriver(driverData)
     setShowDriverModal(true)
+  }
+
+  const handleCreateDriver = async (e) => {
+    e.preventDefault()
+    try {
+      setFormSaving(true)
+      const res = await adminService.createUser({ ...createForm, role: 'driver' })
+      setDrivers(prev => [res.data.user, ...prev])
+      toast.success('Chofer creado exitosamente')
+      setShowCreateModal(false)
+      setCreateForm({ name: '', email: '', phone: '', password: '' })
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al crear el chofer')
+    } finally {
+      setFormSaving(false)
+    }
+  }
+
+  const handleDeleteDriver = (driverData) => {
+    setDriverToDelete(driverData)
+    setShowDeleteModal(true)
+  }
+
+  const confirmDeleteDriver = async () => {
+    try {
+      await adminService.deleteDriver(driverToDelete._id)
+      setDrivers(drivers.filter(d => d._id !== driverToDelete._id))
+      toast.success('Chofer eliminado exitosamente')
+      setShowDeleteModal(false)
+      setDriverToDelete(null)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al eliminar el chofer')
+    }
   }
 
   const handleVerifyDriver = (driverData) => {
@@ -217,7 +256,7 @@ const Drivers = () => {
             <Download className="w-4 h-4" />
             <span>Exportar</span>
           </button>
-          <button className="btn btn-primary btn-md flex items-center space-x-2">
+          <button onClick={() => setShowCreateModal(true)} className="btn btn-primary btn-md flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>Nuevo Chofer</span>
           </button>
@@ -507,6 +546,13 @@ const Drivers = () => {
                         >
                           {driver.isActive ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                         </button>
+                        <button
+                          onClick={() => handleDeleteDriver(driver)}
+                          className="text-red-600 hover:text-red-900"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -725,6 +771,59 @@ const Drivers = () => {
                   Verificar Chofer
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Driver Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Nuevo Chofer</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreateDriver} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
+                <input type="text" required value={createForm.name} onChange={e => setCreateForm(p => ({...p, name: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Nombre completo" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                <input type="email" required value={createForm.email} onChange={e => setCreateForm(p => ({...p, email: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="correo@ejemplo.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+                <input type="tel" value={createForm.phone} onChange={e => setCreateForm(p => ({...p, phone: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="10 dígitos" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
+                <input type="password" required minLength={8} value={createForm.password} onChange={e => setCreateForm(p => ({...p, password: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Mínimo 8 caracteres" />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={formSaving} className="btn btn-primary btn-md">{formSaving ? 'Creando...' : 'Crear Chofer'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Driver Modal */}
+      {showDeleteModal && driverToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <div className="flex items-center mb-4">
+                <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
+                <h3 className="text-lg font-medium text-gray-900">Confirmar Eliminación</h3>
+              </div>
+              <p className="text-sm text-gray-500 mb-6">¿Eliminar al chofer <strong>{driverToDelete.name}</strong>? Esta acción no se puede deshacer.</p>
+              <div className="flex justify-end space-x-3">
+                <button onClick={() => setShowDeleteModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button onClick={confirmDeleteDriver} className="btn btn-danger btn-md">Eliminar</button>
+              </div>
             </div>
           </div>
         </div>

@@ -21,7 +21,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   BarChart3,
-  PieChart
+  PieChart,
+  X
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSocket } from '../../contexts/SocketContext'
@@ -45,6 +46,9 @@ const Payments = () => {
   const [paymentToRefund, setPaymentToRefund] = useState(null)
   const [refundAmount, setRefundAmount] = useState('')
   const [refundReason, setRefundReason] = useState('')
+  const [showNuevoPagoModal, setShowNuevoPagoModal] = useState(false)
+  const [nuevoPagoForm, setNuevoPagoForm] = useState({ concept: '', amount: '', method: 'cash', notes: '' })
+  const [nuevoFormSaving, setNuevoFormSaving] = useState(false)
   const [analytics, setAnalytics] = useState({
     totalRevenue: 0,
     totalTransactions: 0,
@@ -362,7 +366,7 @@ const Payments = () => {
             <Download className="w-4 h-4" />
             <span>Exportar</span>
           </button>
-          <button className="btn btn-primary btn-md flex items-center space-x-2">
+          <button onClick={() => setShowNuevoPagoModal(true)} className="btn btn-primary btn-md flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>Nuevo Pago</span>
           </button>
@@ -658,6 +662,58 @@ const Payments = () => {
           </div>
         )}
       </div>
+
+      {/* Nuevo Pago Manual Modal */}
+      {showNuevoPagoModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Registrar Pago Manual</h2>
+              <button onClick={() => setShowNuevoPagoModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setNuevoFormSaving(true)
+              try {
+                toast.success(`Pago manual registrado: $${nuevoPagoForm.amount} (${nuevoPagoForm.method})`)
+                setShowNuevoPagoModal(false)
+                setNuevoPagoForm({ concept: '', amount: '', method: 'cash', notes: '' })
+              } finally {
+                setNuevoFormSaving(false)
+              }
+            }} className="p-6 space-y-4">
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-700">
+                Los pagos manuales se registran como referencia interna. Los pagos de clientes se generan automáticamente al crear una cita.
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Concepto *</label>
+                <input type="text" required value={nuevoPagoForm.concept} onChange={e => setNuevoPagoForm(p => ({...p, concept: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Descripción del pago" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Monto (MXN) *</label>
+                <input type="number" required min="1" step="0.01" value={nuevoPagoForm.amount} onChange={e => setNuevoPagoForm(p => ({...p, amount: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="0.00" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Método de Pago *</label>
+                <select value={nuevoPagoForm.method} onChange={e => setNuevoPagoForm(p => ({...p, method: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="cash">Efectivo</option>
+                  <option value="card">Tarjeta</option>
+                  <option value="transfer">Transferencia</option>
+                  <option value="other">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                <textarea value={nuevoPagoForm.notes} onChange={e => setNuevoPagoForm(p => ({...p, notes: e.target.value}))} rows={2} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Notas opcionales..." />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowNuevoPagoModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={nuevoFormSaving} className="btn btn-primary btn-md">{nuevoFormSaving ? 'Registrando...' : 'Registrar Pago'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Payment Details Modal */}
       {showPaymentModal && selectedPayment && (

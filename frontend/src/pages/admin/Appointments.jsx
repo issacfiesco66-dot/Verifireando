@@ -20,7 +20,8 @@ import {
   Navigation,
   Phone,
   Mail,
-  FileText
+  FileText,
+  X
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useSocket } from '../../contexts/SocketContext'
@@ -43,10 +44,20 @@ const Appointments = () => {
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [appointmentToAssign, setAppointmentToAssign] = useState(null)
   const [availableDrivers, setAvailableDrivers] = useState([])
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [formSaving, setFormSaving] = useState(false)
+  const [allUsers, setAllUsers] = useState([])
+  const [createForm, setCreateForm] = useState({
+    clientId: '', scheduledDate: '', scheduledTime: '09:00',
+    serviceType: 'verification', street: '', notes: ''
+  })
+  const [editStatus, setEditStatus] = useState('')
 
   useEffect(() => {
     fetchAppointments()
     fetchAvailableDrivers()
+    fetchAllUsers()
   }, [])
 
   useEffect(() => {
@@ -77,6 +88,61 @@ const Appointments = () => {
       toast.error('Error al cargar las citas')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchAllUsers = async () => {
+    try {
+      const res = await adminService.getUsers({ limit: 200, role: 'client' })
+      setAllUsers(Array.isArray(res.data?.users) ? res.data.users : [])
+    } catch (_) {}
+  }
+
+  const handleCreateAppointment = async (e) => {
+    e.preventDefault()
+    try {
+      setFormSaving(true)
+      const dt = new Date(`${createForm.scheduledDate}T${createForm.scheduledTime}:00`)
+      const payload = {
+        client: createForm.clientId,
+        scheduledDate: dt.toISOString(),
+        serviceType: createForm.serviceType,
+        pickupAddress: { street: createForm.street, city: 'CDMX', state: 'CDMX', zipCode: '00000' },
+        services: [{ name: createForm.serviceType, description: createForm.serviceType }],
+        notes: createForm.notes,
+        timeSlot: { start: createForm.scheduledTime, end: createForm.scheduledTime }
+      }
+      const res = await adminService.createAppointment(payload)
+      setAppointments(prev => [res.data.appointment || res.data, ...prev])
+      toast.success('Cita creada exitosamente')
+      setShowCreateModal(false)
+      setCreateForm({ clientId: '', scheduledDate: '', scheduledTime: '09:00', serviceType: 'verification', street: '', notes: '' })
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al crear la cita')
+    } finally {
+      setFormSaving(false)
+    }
+  }
+
+  const openEditModal = (appt) => {
+    setSelectedAppointment(appt)
+    setEditStatus(appt.status)
+    setShowAppointmentModal(false)
+    setShowEditModal(true)
+  }
+
+  const handleEditAppointment = async (e) => {
+    e.preventDefault()
+    try {
+      setFormSaving(true)
+      await adminService.updateAppointmentStatus(selectedAppointment._id, editStatus)
+      setAppointments(prev => prev.map(a => a._id === selectedAppointment._id ? { ...a, status: editStatus } : a))
+      toast.success('Cita actualizada exitosamente')
+      setShowEditModal(false)
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al actualizar la cita')
+    } finally {
+      setFormSaving(false)
     }
   }
 
@@ -319,7 +385,7 @@ const Appointments = () => {
             <Download className="w-4 h-4" />
             <span>Exportar</span>
           </button>
-          <button className="btn btn-primary btn-md flex items-center space-x-2">
+          <button onClick={() => setShowCreateModal(true)} className="btn btn-primary btn-md flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>Nueva Cita</span>
           </button>
@@ -888,11 +954,92 @@ const Appointments = () => {
                 Cerrar
               </button>
               {selectedAppointment.status !== 'completed' && selectedAppointment.status !== 'cancelled' && (
-                <button className="btn btn-primary btn-md">
+                <button onClick={() => openEditModal(selectedAppointment)} className="btn btn-primary btn-md">
                   Editar Cita
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Appointment Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Nueva Cita</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreateAppointment} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente *</label>
+                <select required value={createForm.clientId} onChange={e => setCreateForm(p => ({...p, clientId: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="">Seleccionar cliente...</option>
+                  {allUsers.map(u => <option key={u._id} value={u._id}>{u.name} ({u.email})</option>)}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha *</label>
+                  <input type="date" required value={createForm.scheduledDate} onChange={e => setCreateForm(p => ({...p, scheduledDate: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" min={new Date().toISOString().split('T')[0]} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Hora *</label>
+                  <input type="time" required value={createForm.scheduledTime} onChange={e => setCreateForm(p => ({...p, scheduledTime: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Servicio *</label>
+                <select value={createForm.serviceType} onChange={e => setCreateForm(p => ({...p, serviceType: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="verification">Verificación</option>
+                  <option value="inspection">Inspección</option>
+                  <option value="maintenance">Mantenimiento</option>
+                  <option value="repair">Reparación</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dirección de Recogida *</label>
+                <input type="text" required value={createForm.street} onChange={e => setCreateForm(p => ({...p, street: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Calle y número" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notas</label>
+                <textarea value={createForm.notes} onChange={e => setCreateForm(p => ({...p, notes: e.target.value}))} rows={3} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Notas adicionales..." />
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={formSaving} className="btn btn-primary btn-md">{formSaving ? 'Creando...' : 'Crear Cita'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Appointment Modal */}
+      {showEditModal && selectedAppointment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Editar Cita</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleEditAppointment} className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-3">Cita #{selectedAppointment._id.slice(-8)} &mdash; {selectedAppointment.client?.name}</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Estado *</label>
+                <select value={editStatus} onChange={e => setEditStatus(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="pending">Pendiente</option>
+                  <option value="confirmed">Confirmada</option>
+                  <option value="in_progress">En progreso</option>
+                  <option value="completed">Completada</option>
+                  <option value="cancelled">Cancelada</option>
+                </select>
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowEditModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={formSaving} className="btn btn-primary btn-md">{formSaving ? 'Guardando...' : 'Guardar Cambios'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

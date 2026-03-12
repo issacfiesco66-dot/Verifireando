@@ -18,7 +18,8 @@ import {
   Shield,
   Clock,
   Wrench,
-  FileText
+  FileText,
+  X
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { adminService } from '../../services/api'
@@ -38,6 +39,9 @@ const Cars = () => {
   const [showCarModal, setShowCarModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [carToDelete, setCarToDelete] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [formSaving, setFormSaving] = useState(false)
+  const [createForm, setCreateForm] = useState({ brand: '', model: '', year: new Date().getFullYear(), color: '', plates: '', engineType: 'gasoline' })
 
   useEffect(() => {
     fetchCars()
@@ -102,6 +106,30 @@ const Cars = () => {
     }
 
     setFilteredCars(filtered)
+  }
+
+  const handleCreateCar = async (e) => {
+    e.preventDefault()
+    try {
+      setFormSaving(true)
+      const payload = {
+        brand: createForm.brand,
+        model: createForm.model,
+        year: parseInt(createForm.year),
+        color: createForm.color,
+        plates: createForm.plates.toUpperCase(),
+        engineType: createForm.engineType,
+      }
+      const res = await adminService.createCar(payload)
+      setCars(prev => [res.data.car || res.data, ...prev])
+      toast.success('Vehículo creado exitosamente')
+      setShowCreateModal(false)
+      setCreateForm({ brand: '', model: '', year: new Date().getFullYear(), color: '', plates: '', engineType: 'gasoline' })
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Error al crear el vehículo')
+    } finally {
+      setFormSaving(false)
+    }
   }
 
   const handleViewCar = (carData) => {
@@ -251,7 +279,7 @@ const Cars = () => {
             <Download className="w-4 h-4" />
             <span>Exportar</span>
           </button>
-          <button className="btn btn-primary btn-md flex items-center space-x-2">
+          <button onClick={() => setShowCreateModal(true)} className="btn btn-primary btn-md flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>Nuevo Vehículo</span>
           </button>
@@ -569,6 +597,59 @@ const Cars = () => {
           </div>
         )}
       </div>
+
+      {/* Create Car Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Nuevo Vehículo</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleCreateCar} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Marca *</label>
+                  <input type="text" required value={createForm.brand} onChange={e => setCreateForm(p => ({...p, brand: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Toyota" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Modelo *</label>
+                  <input type="text" required value={createForm.model} onChange={e => setCreateForm(p => ({...p, model: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Corolla" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Año *</label>
+                  <input type="number" required min={1990} max={new Date().getFullYear()+1} value={createForm.year} onChange={e => setCreateForm(p => ({...p, year: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Color *</label>
+                  <input type="text" required value={createForm.color} onChange={e => setCreateForm(p => ({...p, color: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Blanco" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Placas *</label>
+                  <input type="text" required value={createForm.plates} onChange={e => setCreateForm(p => ({...p, plates: e.target.value.toUpperCase()}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="ABC1234" maxLength={8} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Motor</label>
+                  <select value={createForm.engineType} onChange={e => setCreateForm(p => ({...p, engineType: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="gasoline">Gasolina</option>
+                    <option value="diesel">Diésel</option>
+                    <option value="electric">Eléctrico</option>
+                    <option value="hybrid">Híbrido</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end space-x-3 pt-2">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="btn btn-secondary btn-md">Cancelar</button>
+                <button type="submit" disabled={formSaving} className="btn btn-primary btn-md">{formSaving ? 'Creando...' : 'Crear Vehículo'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Car Details Modal */}
       {showCarModal && selectedCar && (

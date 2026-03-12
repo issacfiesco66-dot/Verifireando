@@ -259,6 +259,7 @@ export const adminService = {
   // Users management
   getUsers: (params) => userAPI.get('/', { params }),
   getUserById: (id) => userAPI.get(`/${id}`),
+  createUser: (data) => userAPI.post('/', data),
   updateUser: (id, data) => userAPI.put(`/${id}`, data),
   deleteUser: (id) => userAPI.delete(`/${id}`),
   toggleUserStatus: (id, isActive) => userAPI.patch(`/${id}/status`, { isActive }),
@@ -276,6 +277,7 @@ export const adminService = {
   // Cars management
   getCars: (params) => carAPI.get('/', { params }),
   getCarById: (id) => carAPI.get(`/${id}`),
+  createCar: (data) => carAPI.post('/', data),
   updateCar: (id, data) => carAPI.put(`/${id}`, data),
   deleteCar: (id) => carAPI.delete(`/${id}`),
   toggleCarStatus: (id, isActive) => carAPI.put(`/${id}/status`, { isActive }),
@@ -284,6 +286,7 @@ export const adminService = {
   // Appointments management
   getAppointments: (params) => appointmentAPI.get('/', { params }),
   getAppointmentById: (id) => appointmentAPI.get(`/${id}`),
+  createAppointment: (data) => appointmentAPI.post('/', data),
   updateAppointment: (id, data) => appointmentAPI.put(`/${id}`, data),
   updateAppointmentStatus: (id, status) => appointmentAPI.put(`/${id}/status`, { status }),
   assignDriver: (id, driverId) => appointmentAPI.put(`/${id}/assign-driver`, { driverId }),

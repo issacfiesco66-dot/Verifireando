@@ -48,6 +48,37 @@ const updateSettingsSchema = Joi.object({
   }).required()
 });
 
+// Crear usuario (solo admin, sin OTP)
+router.post('/', auth, authorize('admin'), async (req, res) => {
+  try {
+    const { name, email, phone, password, role } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Nombre, email y contraseña son requeridos' });
+    }
+    const existing = await User.findOne({ $or: [{ email }, ...(phone ? [{ phone }] : [])] });
+    if (existing) {
+      return res.status(409).json({ message: 'El email o teléfono ya está registrado' });
+    }
+    const user = new User({
+      name,
+      email,
+      phone: phone || undefined,
+      password,
+      role: role || 'client',
+      isActive: true,
+      isVerified: true,
+    });
+    await user.save();
+    const userObj = user.toObject();
+    delete userObj.password;
+    logger.info(`Admin ${req.user.email} creó usuario: ${email}`);
+    res.status(201).json({ message: 'Usuario creado exitosamente', user: userObj });
+  } catch (error) {
+    logger.error('Error creando usuario:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
 // Obtener todos los usuarios (solo admin)
 router.get('/', auth, authorize('admin'), async (req, res) => {
   try {
