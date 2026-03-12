@@ -501,7 +501,7 @@ router.post('/verify-otp', otpLimiter, async (req, res) => {
     // Verificar código usando el método del modelo que compara con la BD
     const isCodeValid = user.verifyCode(code);
     if (!isCodeValid) {
-      logger.warn(`OTP inválido para ${email}. Recibido: ${code}, Esperado: ${user.verificationCode}, Expira: ${user.verificationCodeExpires}`);
+      logger.warn(`OTP inválido para ${email}`);
       return res.status(400).json({ message: 'Código inválido o expirado' });
     }
 
@@ -724,7 +724,7 @@ router.post('/google', authLimiter, async (req, res) => {
     
     if (!user) {
       // Validar rol si se proporciona
-      const validRoles = ['client', 'driver', 'admin'];
+      const validRoles = ['client', 'driver']; // Admin never via Google OAuth
       const userRole = role && validRoles.includes(role) ? role : 'client';
       
       // Crear nuevo usuario si no existe
@@ -796,8 +796,17 @@ router.post('/google', authLimiter, async (req, res) => {
   }
 });
 
+const forgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hora
+  max: 3, // máximo 3 intentos por hora por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: isLocalhost,
+  message: { message: 'Demasiados intentos. Por favor intenta de nuevo en 1 hora.' }
+});
+
 // Forgot password
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', forgotPasswordLimiter, async (req, res) => {
   try {
     const { email } = req.body;
     
@@ -829,7 +838,7 @@ router.post('/forgot-password', async (req, res) => {
       logger.info(`Password reset email sent to: ${email}`);
     } else {
       // SMTP no configurado o error: loguear token para recuperación manual
-      logger.warn(`SMTP no disponible. Token de recuperación para ${email}: ${resetToken}`);
+      logger.warn(`SMTP no disponible para reset de ${email}. Verificar configuración de correo.`);
     }
     
     // Siempre responder 200 por seguridad (no revelar si email existe)
