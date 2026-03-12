@@ -816,7 +816,7 @@ router.post('/forgot-password', async (req, res) => {
     );
 
     // Enviar email con el token
-    const emailSent = await sendPasswordResetEmail(email, resetToken);
+    const emailSent = await sendPasswordResetEmail(email, user.name, resetToken);
     
     if (!emailSent) {
       return res.status(500).json({ 
