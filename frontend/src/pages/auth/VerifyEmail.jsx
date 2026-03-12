@@ -124,9 +124,9 @@ const VerifyEmail = () => {
           <>
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Verificación Requerida</h1>
             <p className="text-gray-600 mb-4">
-              Hemos enviado un código de verificación a tu WhatsApp.
+              Hemos enviado un código de verificación de 6 dígitos a tu correo electrónico <strong>{email}</strong>.
               <br/>
-              <span className="text-sm text-gray-500">(En desarrollo: el código aparece en un mensaje emergente)</span>
+              <span className="text-sm text-gray-500">Revisa también tu carpeta de spam.</span>
             </p>
             
             <form onSubmit={handleManualVerify} className="space-y-4">

@@ -33,9 +33,6 @@ const Register = () => {
     }
   }, [searchParams, setValue])
 
-  // Log para debug - versión simplificada de registro
-  console.log('Register v2.0 - Conductor solo requiere licencia')
-
   // Redirect if already logged in (except right after form registration)
   useEffect(() => {
     if (user && !justRegistered) {
