@@ -772,6 +772,103 @@ router.post('/google', authLimiter, async (req, res) => {
   }
 });
 
+// Forgot password
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ message: 'El email es requerido' });
+    }
+
+    // Buscar usuario por email
+    const user = await User.findOne({ email }) || await Driver.findOne({ email });
+    
+    if (!user) {
+      // Por seguridad, no revelamos si el email existe o no
+      return res.json({ 
+        message: 'Si el email está registrado, recibirás instrucciones para recuperar tu contraseña' 
+      });
+    }
+
+    // Generar token de recuperación (válido por 1 hora)
+    const resetToken = jwt.sign(
+      { userId: user._id, type: 'password-reset' },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    // Aquí enviarías email con el token
+    // Por ahora, solo devolvemos éxito
+    logger.info(`Password reset request for: ${email}`);
+    
+    res.json({ 
+      message: 'Si el email está registrado, recibirás instrucciones para recuperar tu contraseña',
+      // En desarrollo, devolvemos el token para pruebas
+      ...(process.env.NODE_ENV === 'development' && { resetToken })
+    });
+
+  } catch (error) {
+    logger.error('Error en forgot password:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
+// Reset password
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ 
+        message: 'El token y la nueva contraseña son requeridos' 
+      });
+    }
+
+    // Validar formato de contraseña
+    const { error } = passwordSchema.validate(newPassword);
+    if (error) {
+      return res.status(400).json({ 
+        message: error.details[0].message 
+      });
+    }
+
+    // Verificar token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    if (decoded.type !== 'password-reset') {
+      return res.status(400).json({ 
+        message: 'Token inválido' 
+      });
+    }
+
+    // Buscar usuario y actualizar contraseña
+    let user = await User.findById(decoded.userId);
+    if (!user) {
+      user = await Driver.findById(decoded.userId);
+    }
+
+    if (!user) {
+      return res.status(400).json({ message: 'Token inválido o expirado' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    logger.info(`Password reset successful for: ${user.email}`);
+    
+    res.json({ message: 'Contraseña actualizada exitosamente' });
+
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return res.status(400).json({ message: 'Token inválido o expirado' });
+    }
+    
+    logger.error('Error en reset password:', error);
+    res.status(500).json({ message: 'Error interno del servidor' });
+  }
+});
+
 // Logout (invalidar token - en producción usarías una blacklist)
 router.post('/logout', auth, async (req, res) => {
   try {

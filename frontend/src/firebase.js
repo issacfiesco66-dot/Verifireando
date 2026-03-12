@@ -18,9 +18,9 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// Initialize Analytics only in secure context (HTTPS)
+// Initialize Analytics only in secure context (HTTPS) and when enabled
 let analytics = null;
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && import.meta.env.VITE_ENABLE_ANALYTICS === 'true') {
   const isSecureContext = window.isSecureContext || 
                           window.location.protocol === 'https:' || 
                           ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -60,9 +60,9 @@ export const signOutUser = async () => {
   }
 };
 
-// Initialize Cloud Messaging only in secure context (HTTPS or localhost)
+// Initialize Cloud Messaging only in secure context (HTTPS or localhost) and when enabled
 let messaging = null;
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && import.meta.env.VITE_ENABLE_ANALYTICS === 'true') {
   // Verificar contexto seguro (HTTPS o localhost)
   const isSecureContext = window.isSecureContext || 
                           window.location.protocol === 'https:' || 
